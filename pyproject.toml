@@ -1,0 +1,18 @@
+[project]
+name = "NeeLC"
+dynamic = ["version"]
+description = "A needlet ILC code for Python"
+authors = [
+    { name = "Federico Bianchini", email = "fbianc@stanford.edu" }
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.8"
+
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["src"]
