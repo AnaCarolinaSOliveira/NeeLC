@@ -82,3 +82,41 @@ def masked_smoothing(U, fwhm=5.0, use_pixel_weights=True):
     W[U != U] = 0
     WW = hp.smoothing(W, fwhm=np.radians(fwhm), use_pixel_weights=use_pixel_weights)
     return VV / WW
+
+def cl2dl(Cl, Lrange):
+    factor = (Lrange*(Lrange+1))/(2*np.pi)
+    return Cl*factor
+
+class DetSpecs(object):
+
+    def __init__(self, det='SPT'):
+
+        self.det = det
+
+        if det=='SPT':
+            self.bands = np.array([95.,150.,220.]) # [GHz]
+            self.nb = len(self.bands) # number of bands
+            self.beam_size_fwhm_arcmin = np.array([1.57,1.17,1.04]) # in arcmin
+            self.beam_size_fwhm = arcmin2rad(self.beam_size_fwhm_arcmin)
+            self.sigma_beam = self.beam_size_fwhm / np.sqrt(8.*np.log(2.)) # fwhm to sigma
+
+            self.white_noise_arcmin = np.array([3.0, 2.5, 8.9]) # in muK-arcmin
+            self.white_noise = arcmin2rad(self.white_noise_arcmin)
+
+            self.l_knee = np.array([1200., 2200., 2300.])
+            self.alpha = np.array([-3.0, -4.0, -4.0])
+
+    def beam_function(self, L):
+        return np.transpose(np.array([np.exp(-((L[i]**2) * (self.sigma_beam**2))/2.) for i in range(len(L))]))
+    
+    def noise_eff(self, L):
+        if not isinstance(L, np.ndarray):
+            L = np.array(L)
+
+        noise_eff = np.zeros([self.nb, len(L)])
+        beam = self.beam_function(L)
+        for b in np.arange(self.nb):
+            noise_eff[b] = (np.square(self.white_noise[b])*(1+(L/self.l_knee[b])**self.alpha[b]))/np.square(beam[b]) # in muK^2-radians^2  
+        noise_eff = np.where(np.isinf(noise_eff), 0, noise_eff)
+
+        return noise_eff
