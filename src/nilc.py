@@ -2,7 +2,7 @@ import numpy as np
 import healpy as hp
 from itertools import combinations_with_replacement
 
-from .utils import masked_smoothing
+from utils import masked_smoothing
 
 
 class NILC(object):
@@ -25,6 +25,7 @@ class NILC(object):
 
         self.need = need
         self.nbands = need.nbands
+        self.npix = hp.nside2npix(need.nside) # does this always work? might not when input betajk calculated by another instance of needlet
         self.all_freqs = freqs
         assert(isinstance(beams, dict))
         assert(set(beams.keys()) == set(freqs))
@@ -43,6 +44,7 @@ class NILC(object):
         for nu in self.all_freqs:
             self.beam_ratios[nu][self.beam_ratios[nu] > 1/self.beam_thresh[nu]] = 0
         self.freqs = self.check_freqs_per_band()
+        self.nfreqs = {j: len(self.freqs[j]) for j in self.freqs}
 
         if mask is not None:
             self.mask = {j: hp.ud_grade(mask, nside_out=self.need.nside[j]) for j in range(self.nbands)}
@@ -51,7 +53,7 @@ class NILC(object):
                 self.mask_binary[j][self.mask[j] > 0] = 1
         else:
             self.mask = None
-            self.mask_binary = None
+            self.mask_binary = {j: 1.0 for j in range(self.nbands)}
 
         if fwhm_cov is None:
             self.fwhm_cov = {j: self.find_fwhm_cov(j) for j in range(self.nbands)}
@@ -78,7 +80,7 @@ class NILC(object):
         for j in range(self.nbands):
             good_freqs[j] = []
             for nu in self.all_freqs:
-                if ((self.beam_ratios_inv[nu])[self.l_mins[j]:self.l_maxs[j]] > self.beam_thresh[nu]).all():
+                if ((self.beam_ratios_inv[nu])[self.need.l_mins[j]:self.need.l_maxs[j]] > self.beam_thresh[nu]).all():
                     good_freqs[j].append(nu)
         return good_freqs
     
@@ -95,7 +97,7 @@ class NILC(object):
         Returns:
         float: The number of modes in the given band.
         """
-        return (self.h_ell[j]**2*(2*self.l_range+1)).sum()*fsky
+        return (self.need.h_ell[j]**2*(2*self.need.l_range+1)).sum()*fsky
     
 
     def find_fwhm_cov(self, j, N_dep=0, b_tol=0.01, fsky=1):
@@ -141,25 +143,110 @@ class NILC(object):
                                for i in range(3)]) 
                                for j in range(self.nbands)}
         return betajk
-    
 
    
-    def get_betajk_cov(self, idx, stype='comb', use_pixel_weights=True, iter=3, only_b=True, betajk=None, fwhm_cov=None):
+    def get_betajk_cov(self, betajk=None, fwhm_cov=None, idx=None, stype='comb', use_pixel_weights=True, iter=3, only_b=True):
         if fwhm_cov is None:
             fwhm_cov = self.fwhm_cov
             if not isinstance(fwhm_cov, dict):
                 fwhm_cov = {j: fwhm_cov for j in range(self.nbands)}
+
         if betajk is None:
             betajk = self.get_betajk(idx, stype=stype, use_pixel_weights=use_pixel_weights, iter=iter, only_b=only_b)
+
         # calculate betajk_mean as the smoothed needlet coefficient maps
-        betajk_mean = {j: np.array([masked_smoothing(betajk[j][i]*self.mask_binary[j], fwhm=fwhm_cov[j]) for i in range(len(betajk[j]))]) for j in range(self.nbands)}
+        betajk_mean = {j: np.array([masked_smoothing(betajk[j][nu]*self.mask_binary[j], fwhm=fwhm_cov[j]) for nu in range(len(self.freqs[j]))]) for j in range(self.nbands)}
         #  the covariance is calculated by subtracting these means from the full needlet coefficient maps and multiplying them together, then smoothing the result.
         # betajk_cov = {j: np.array([masked_smoothing((betajk[j][i]-betajk_mean[j][i])*(betajk[j][i]-betajk_mean[j][i]), fwhm=fwhm_cov[j]) for i in range(len(betajk[j]))]) for j in range(self.nbands)}
         betajk_cov = {}
         for j in range(self.nbands):
             betajk_cov[j] = {}
             for nu1,nu2 in combinations_with_replacement(self.freqs[j], 2):
-                m1 = betajk[j][self.freqs[j].index(nu1)] - betajk_mean[j][self.freqs[j].index(nu1)]
-                m2 = betajk[j][self.freqs[j].index(nu2)] - betajk_mean[j][self.freqs[j].index(nu2)]
-                betajk_cov[j][(nu1,nu2)] = masked_smoothing(m1*m2*self.mask_binary[j], fwhm=fwhm_cov[j])
+                    m1 = betajk[j][self.freqs[j].index(nu1)] - betajk_mean[j][self.freqs[j].index(nu1)]
+                    m2 = betajk[j][self.freqs[j].index(nu2)] - betajk_mean[j][self.freqs[j].index(nu2)]
+                    betajk_cov[j][(nu1,nu2)] = masked_smoothing(m1*m2*self.mask_binary[j], fwhm=fwhm_cov[j])
+
         return betajk_cov
+    
+
+    def cov2mat(self, cov):
+        """
+        Recasts get_betajk_cov() covariance matrix 
+        from hashtable to array.
+        """
+        betajk_mat = {}
+        for j in range(self.nbands):
+            betajk_mat[j] = np.zeros([self.nfreqs[j],self.nfreqs[j],self.npix[j]])
+            for nu1,nu2 in combinations_with_replacement(self.freqs[j], 2):
+                betajk_mat[j][self.freqs[j].index(nu1)][self.freqs[j].index(nu2)] = cov[j][(nu1, nu2)]
+                betajk_mat[j][self.freqs[j].index(nu2)][self.freqs[j].index(nu1)] = cov[j][(nu1, nu2)]
+
+        return betajk_mat
+    
+    def get_seds(self, cmb, tsz, cib):
+        nc = sum([cmb, tsz, cib])
+        seds = {j: np.zeros([self.npix[j], self.nfreqs[j], nc]) for j in range(self.nbands)}
+
+        for j in range(self.nbands):
+            freqs = np.array(self.freqs[j], dtype=int)
+            idx=0
+            if cmb:
+                seds[j][:,:,idx] = 1.
+                idx+=1
+
+            if tsz:
+                xb = freqs/56.8 # h nu / k T_cmb (for nu in GHz)
+                tszfac = 2.73 * (xb * (np.exp(xb)+1.)/(np.exp(xb)-1.) - 4.) # tSZ spectral dependence
+                tszfac_norm = tszfac / tszfac[1] # the original SZMap was made for 150 GHz 
+                for b in range(len(freqs)):
+                    seds[j][:,b,idx] = tszfac_norm[b]
+                idx+=1
+
+            if cib:
+                # a = 0.048 # h/k in GHz
+                beta_p = 1.48
+                beta_cl = 2.23
+
+                xb = freqs/56.8 # h nu / k T_cmb (for nu in GHz)
+                fb = freqs/520.9 # h nu / k T_cib (for nu in GHz)
+                cibfac = (freqs**(beta_p-1.)+freqs**(beta_cl-1.)) * (1./np.exp(fb)-1.) * (56.8*2.73) * ((np.exp(xb)-1.)**2. / (np.exp(xb)))
+                cibfac_norm = cibfac / cibfac[1]
+                for b in range(len(freqs)):
+                    seds[j][:,b,idx] = cibfac_norm[b]
+                idx+=1
+        
+        return seds 
+
+    def get_weights(self, betajk_cov=None, seds=None, cmb=True, tsz=False, cib=False):
+        nc = sum([cmb, tsz, cib])
+
+        if betajk_cov is None:
+            betajk_cov = self.get_betajk_cov()
+            covmat = self.cov2mat(betajk_cov)
+        else:
+            if isinstance(betajk_cov[0], dict):
+                covmat = self.cov2mat(betajk_cov)
+            else: 
+                covmat = betajk_cov
+
+        if seds is None: 
+            seds = self.get_seds(cmb=cmb, tsz=tsz, cib=cib)
+ 
+        weights = {j: np.zeros([self.npix[j],nc,self.nfreqs[j]]) for j in range(self.nbands)}
+        noise_pred = {j: np.zeros([self.npix[j],nc,]) for j in range(self.nbands)}
+
+        for j in range(self.nbands):
+            c = np.transpose(covmat[j])
+            for pix in range(self.npix[j]):
+                cinv = np.linalg.inv(c[pix])
+                atc = np.dot(np.transpose(seds[j][pix]),cinv) # TODO check if mat multiplication here makes sense 
+                atca = np.dot(atc,seds[j][pix])
+                iatca = np.linalg.inv(atca)
+                if nc > 1:
+                    noise_pred[pix] = np.asarray([np.sqrt(iatca[i,i]) for i in np.arange(nc)])
+                else:
+                    noise_pred[pix] = np.sqrt(iatca)
+            
+                weights[pix] = np.dot(iatca,atc)
+
+        return weights, noise_pred
