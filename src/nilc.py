@@ -187,6 +187,21 @@ class NILC(object):
         nc = sum([cmb, tsz, cib])
         seds = {j: np.zeros([self.npix[j], self.nfreqs[j], nc]) for j in range(self.nbands)}
 
+        def tsz_sed(nus):
+            xb = nus/56.8 # h nu / k T_cmb (for nu in GHz)
+            tszfac = 2.73 * (xb * (np.exp(xb)+1.)/(np.exp(xb)-1.) - 4.) # tSZ spectral dependence
+            tszfac_norm = tszfac / tszfac[1] # the original SZMap was made for 150 GHz 
+            return tszfac_norm
+        
+        def cib_sed(nus):
+            beta_p = 1.48
+            beta_cl = 2.23
+            xb = nus/56.8 # h nu / k T_cmb (for nu in GHz)
+            fb = nus/520.9 # h nu / k T_cib (for nu in GHz)
+            cibfac = (nus**(beta_p-1.)+nus**(beta_cl-1.)) * (1./np.exp(fb)-1.) * (56.8*2.73) * ((np.exp(xb)-1.)**2. / (np.exp(xb)))
+            cibfac_norm = cibfac / cibfac[1]
+            return cibfac_norm
+        
         for j in range(self.nbands):
             freqs = np.array(self.freqs[j], dtype=int)
             idx=0
@@ -195,22 +210,13 @@ class NILC(object):
                 idx+=1
 
             if tsz:
-                xb = freqs/56.8 # h nu / k T_cmb (for nu in GHz)
-                tszfac = 2.73 * (xb * (np.exp(xb)+1.)/(np.exp(xb)-1.) - 4.) # tSZ spectral dependence
-                tszfac_norm = tszfac / tszfac[1] # the original SZMap was made for 150 GHz 
+                tszfac_norm = tsz_sed(freqs)
                 for b in range(len(freqs)):
                     seds[j][:,b,idx] = tszfac_norm[b]
                 idx+=1
 
             if cib:
-                # a = 0.048 # h/k in GHz
-                beta_p = 1.48
-                beta_cl = 2.23
-
-                xb = freqs/56.8 # h nu / k T_cmb (for nu in GHz)
-                fb = freqs/520.9 # h nu / k T_cib (for nu in GHz)
-                cibfac = (freqs**(beta_p-1.)+freqs**(beta_cl-1.)) * (1./np.exp(fb)-1.) * (56.8*2.73) * ((np.exp(xb)-1.)**2. / (np.exp(xb)))
-                cibfac_norm = cibfac / cibfac[1]
+                cibfac_norm = cib_sed(freqs)
                 for b in range(len(freqs)):
                     seds[j][:,b,idx] = cibfac_norm[b]
                 idx+=1
