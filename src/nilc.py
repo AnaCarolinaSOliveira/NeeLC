@@ -194,6 +194,7 @@ class NILC(object):
             return tszfac_norm
         
         def cib_sed(nus):
+            # includes CIB contributions from poisson and cluster terms 
             beta_p = 1.48
             beta_cl = 2.23
             xb = nus/56.8 # h nu / k T_cmb (for nu in GHz)
@@ -245,14 +246,36 @@ class NILC(object):
             c = np.transpose(covmat[j])
             for pix in range(self.npix[j]):
                 cinv = np.linalg.inv(c[pix])
-                atc = np.dot(np.transpose(seds[j][pix]),cinv) # TODO check if mat multiplication here makes sense 
+                atc = np.dot(np.transpose(seds[j][pix]),cinv) 
                 atca = np.dot(atc,seds[j][pix])
                 iatca = np.linalg.inv(atca)
                 if nc > 1:
-                    noise_pred[pix] = np.asarray([np.sqrt(iatca[i,i]) for i in np.arange(nc)])
+                    noise_pred[j][pix] = np.asarray([np.sqrt(iatca[i,i]) for i in np.arange(nc)])
                 else:
-                    noise_pred[pix] = np.sqrt(iatca)
+                    noise_pred[j][pix] = np.sqrt(iatca)
             
-                weights[pix] = np.dot(iatca,atc)
+                weights[j][pix] = np.dot(iatca,atc)
 
         return weights, noise_pred
+    
+
+    def separate_betajk(self, betajk, weights=None):
+        # if no weights are provided, the MV weights for CMB are going to be set as default
+
+        if weights is None:
+            # for this to work, we need to fix get_betajk()
+            weights = self.get_weights(betajk_cov=None, seds=None, cmb=True, tsz=False, cib=False)
+
+        nc = weights[0].shape[1] # find a better solution for the number of components?
+
+        separated_bjk = {}
+        for j in range(self.nbands):
+            bjk = np.transpose(betajk[j])
+            separated_bjk[j] = np.zeros([nc, self.npix[j]])
+            for c in range(nc):
+                w_j = weights[j][:,c]
+                for pix in range(len(w_j)):
+                    separated_bjk[j][c][pix] = np.dot(w_j[pix], bjk[pix])
+
+        return separated_bjk
+        
