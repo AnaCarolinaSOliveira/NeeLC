@@ -195,6 +195,7 @@ class NILC(object):
         
         def cib_sed(nus):
             # includes CIB contributions from poisson and cluster terms 
+            # double check with kimmy, might need to choose only one of these behaviors 
             beta_p = 1.48
             beta_cl = 2.23
             xb = nus/56.8 # h nu / k T_cmb (for nu in GHz)
@@ -258,8 +259,10 @@ class NILC(object):
 
         return weights, noise_pred
     
+    def plot_weights(self, weights):
+        pass
 
-    def separate_betajk(self, betajk, weights=None):
+    def separate_betajk(self, betajk, weights=None, use_pixel_weights=True):
         # if no weights are provided, the MV weights for CMB are going to be set as default
 
         if weights is None:
@@ -269,13 +272,16 @@ class NILC(object):
         nc = weights[0].shape[1] # find a better solution for the number of components?
 
         separated_bjk = {}
-        for j in range(self.nbands):
-            bjk = np.transpose(betajk[j])
-            separated_bjk[j] = np.zeros([nc, self.npix[j]])
-            for c in range(nc):
-                w_j = weights[j][:,c]
-                for pix in range(len(w_j)):
-                    separated_bjk[j][c][pix] = np.dot(w_j[pix], bjk[pix])
+        for c in range(nc):
+            separated_bjk[c] = 0
+            for j in range(self.nbands):
+                bjk = np.transpose(betajk[j])
+                w_j = weights[j][:,c] 
+                T_j_ilc = np.array([np.dot(w_j[pix], bjk[pix]) for pix in range(len(w_j))]) 
+                alm_j = hp.map2alm(T_j_ilc, lmax=self.need.l_maxs[j], use_pixel_weights=use_pixel_weights)
+                hxalm_j = hp.almxfl(alm_j, self.need.h_ell[j,:])
+                z_j = hp.alm2map(hxalm_j, nside=max(self.need.nside))
+                separated_bjk[c] += z_j
 
         return separated_bjk
         
