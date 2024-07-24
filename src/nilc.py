@@ -189,19 +189,20 @@ class NILC(object):
 
         def tsz_sed(nus):
             xb = nus/56.8 # h nu / k T_cmb (for nu in GHz)
-            tszfac = 2.73 * (xb * (np.exp(xb)+1.)/(np.exp(xb)-1.) - 4.) # tSZ spectral dependence
-            tszfac_norm = tszfac / tszfac[1] # the original SZMap was made for 150 GHz 
+            tszfac = 2.73 * (xb * (np.exp(xb)+1.)/(np.exp(xb)-1.) - 4.) # in units of compton-y?
+            # tszfac = 1 / (2.73 * (xb * (np.exp(xb)+1.)/(np.exp(xb)-1.) - 4.))
+            tszfac_norm = tszfac / 1 # tszfac[1] 
             return tszfac_norm
         
         def cib_sed(nus):
-            # includes CIB contributions from poisson and cluster terms 
-            # double check with kimmy, might need to choose only one of these behaviors 
+            T_cmb = 2.73
             beta_p = 1.48
             beta_cl = 2.23
             xb = nus/56.8 # h nu / k T_cmb (for nu in GHz)
             fb = nus/520.9 # h nu / k T_cib (for nu in GHz)
-            cibfac = (nus**(beta_p-1.)+nus**(beta_cl-1.)) * (1./np.exp(fb)-1.) * (56.8*2.73) * ((np.exp(xb)-1.)**2. / (np.exp(xb)))
-            cibfac_norm = cibfac / cibfac[1]
+            # CIB term set to Poisson
+            cibfac = (nus**(beta_p-1.)) * (1./np.exp(fb)-1.) * (56.8*T_cmb) * ((np.exp(xb)-1.)**2. / (np.exp(xb)))
+            cibfac_norm = cibfac / 1 # cibfac[1]
             return cibfac_norm
         
         for j in range(self.nbands):
