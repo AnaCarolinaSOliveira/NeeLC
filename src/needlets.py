@@ -140,11 +140,15 @@ class GaussianNeedlet(Needlet):
     """
     Needlets with Gaussian window functions.
     """
-    def __init__(self, theta_fwhms_arcmin, l_max):
+    def __init__(self, theta_fwhms_arcmin, l_max, l_min=None):
         # make sure theta_fwhms_arcmin is an array of numbers in descending order
         assert(np.all(np.diff(theta_fwhms_arcmin) < 0))
 
         super(GaussianNeedlet, self).__init__(len(theta_fwhms_arcmin)+1, l_max)
+        if l_min is None:
+            self.l_mins = np.zeros(len(theta_fwhms_arcmin)+1, dtype=int)
+        else:
+            self.l_mins = np.ones(len(theta_fwhms_arcmin)+1, dtype=int)*l_min
 
         # create the Gaussian window functions
         self.h_ell[0] = gaussian_window_function(self.l_range, theta_fwhms_arcmin[0])
