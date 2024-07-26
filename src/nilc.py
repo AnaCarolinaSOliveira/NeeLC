@@ -187,21 +187,27 @@ class NILC(object):
         nc = sum([cmb, tsz, cib])
         seds = {j: np.zeros([self.npix[j], self.nfreqs[j], nc]) for j in range(self.nbands)}
 
+        t_cmb = 2.726 # K
+        t_cmb_muk = 2.726e6 # muK
+        h_planck = 6.626e-34 # Js
+        k_B = 1.38065e-23 # J/K
+        
         def tsz_sed(nus):
-            xb = nus/56.8 # h nu / k T_cmb (for nu in GHz)
-            tszfac = 2.73 * (xb * (np.exp(xb)+1.)/(np.exp(xb)-1.) - 4.) # in units of compton-y?
-            # tszfac = 1 / (2.73 * (xb * (np.exp(xb)+1.)/(np.exp(xb)-1.) - 4.))
+            xb = (h_planck * nus*1e9)/(k_B * t_cmb)  # for nus in GHz
+            tszfac = t_cmb_muk * (xb * (np.exp(xb)+1.)/(np.exp(xb)-1.) - 4.) # tSZ spectral dependence, in compton y units 
             tszfac_norm = tszfac / 1 # tszfac[1] 
             return tszfac_norm
         
         def cib_sed(nus):
-            T_cmb = 2.73
             beta_p = 1.48
             beta_cl = 2.23
-            xb = nus/56.8 # h nu / k T_cmb (for nu in GHz)
-            fb = nus/520.9 # h nu / k T_cib (for nu in GHz)
+            t_cib = 25 # K
+
+            xb = (h_planck * nus*1e9)/(k_B * t_cmb)  # for nus in GHz
+            fb = (h_planck * nus*1e9)/(k_B * t_cib)  # for nus in GHz
             # CIB term set to Poisson
-            cibfac = (nus**(beta_p-1.)) * (1./np.exp(fb)-1.) * (56.8*T_cmb) * ((np.exp(xb)-1.)**2. / (np.exp(xb)))
+            cibfac = (nus**beta_p) * (t_cmb * (np.exp(xb)-1.)**2.) / ((np.exp(fb)-1.)*xb*np.exp(xb))
+            # cibfac = (nus**beta_p + nus**beta_cl) * (t_cmb * (np.exp(xb)-1.)**2.) / ((np.exp(fb)-1.)*xb*np.exp(xb))
             cibfac_norm = cibfac / 1 # cibfac[1]
             return cibfac_norm
         
