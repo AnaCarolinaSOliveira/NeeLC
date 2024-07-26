@@ -87,6 +87,30 @@ def cl2dl(Cl, Lrange):
     factor = (Lrange*(Lrange+1))/(2*np.pi)
     return Cl*factor
 
+def f_sz(nus):
+    """
+    Spectral dependence of the tSZ effect, for nus in GHz.
+    """
+    t_cmb = 2.726 # K
+    h_planck = 6.626e-34 # Js
+    k_B = 1.38065e-23 # J/K
+
+    X = (h_planck * nus*1e9)/(k_B * t_cmb) 
+    return X * (np.exp(X)+1.)/(np.exp(X)-1.) - 4.
+
+def f_cib(nus, beta):
+    """
+    Spectral dependence of the CIB, for nus in GHz.
+    """
+    t_cmb = 2.726 # K
+    h_planck = 6.626e-34 # Js
+    k_B = 1.38065e-23 # J/K
+    t_cib = 25 # K
+
+    X = (h_planck * nus*1e9)/(k_B * t_cmb)  
+    F = (h_planck * nus*1e9)/(k_B * t_cib) 
+    return  (nus**beta) * ((np.exp(X)-1.)**2.) / ((np.exp(F)-1.)*X*np.exp(X))
+
 class DetSpecs(object):
 
     def __init__(self, det='SPT'):
