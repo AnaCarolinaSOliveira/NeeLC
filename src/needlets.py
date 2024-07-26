@@ -95,6 +95,7 @@ class Needlet(object):
         plt.xlabel(r'$\ell$', fontsize=14)
         plt.ylabel(r'$h_{\ell}^{j}$', fontsize=14)
         plt.grid(alpha=0.3)
+        plt.xscale('log')
         plt.legend()
         # plt.show()
 
