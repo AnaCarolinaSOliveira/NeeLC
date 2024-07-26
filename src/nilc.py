@@ -2,7 +2,7 @@ import numpy as np
 import healpy as hp
 from itertools import combinations_with_replacement
 
-from utils import masked_smoothing
+from utils import masked_smoothing, f_sz, f_cib
 
 
 class NILC(object):
@@ -187,27 +187,17 @@ class NILC(object):
         nc = sum([cmb, tsz, cib])
         seds = {j: np.zeros([self.npix[j], self.nfreqs[j], nc]) for j in range(self.nbands)}
 
-        t_cmb = 2.726 # K
         t_cmb_muk = 2.726e6 # muK
-        h_planck = 6.626e-34 # Js
-        k_B = 1.38065e-23 # J/K
         
         def tsz_sed(nus):
-            xb = (h_planck * nus*1e9)/(k_B * t_cmb)  # for nus in GHz
-            tszfac = t_cmb_muk * (xb * (np.exp(xb)+1.)/(np.exp(xb)-1.) - 4.) # tSZ spectral dependence, in compton y units 
+            tszfac = t_cmb_muk * f_sz(nus) # tSZ spectral dependence, in compton y units 
             tszfac_norm = tszfac / 1 # tszfac[1] 
             return tszfac_norm
         
         def cib_sed(nus):
             beta_p = 1.48
             beta_cl = 2.23
-            t_cib = 25 # K
-
-            xb = (h_planck * nus*1e9)/(k_B * t_cmb)  # for nus in GHz
-            fb = (h_planck * nus*1e9)/(k_B * t_cib)  # for nus in GHz
-            # CIB term set to Poisson
-            cibfac = (nus**beta_p) * (t_cmb * (np.exp(xb)-1.)**2.) / ((np.exp(fb)-1.)*xb*np.exp(xb))
-            # cibfac = (nus**beta_p + nus**beta_cl) * (t_cmb * (np.exp(xb)-1.)**2.) / ((np.exp(fb)-1.)*xb*np.exp(xb))
+            cibfac = t_cmb_muk * f_cib(nus, beta_p) # using poisson term only, for now
             cibfac_norm = cibfac / 1 # cibfac[1]
             return cibfac_norm
         
