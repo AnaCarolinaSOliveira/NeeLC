@@ -1,3 +1,4 @@
+from mpi4py import MPI
 import numpy as np
 import healpy as hp
 from itertools import combinations_with_replacement
@@ -167,7 +168,46 @@ class NILC(object):
                     betajk_cov[j][(nu1,nu2)] = masked_smoothing(m1*m2*self.mask_binary[j], fwhm=fwhm_cov[j])
 
         return betajk_cov
-    
+
+    def get_betajk_cov_parallel(self, betajk=None, fwhm_cov=None, idx=None, stype='comb', 
+                       use_pixel_weights=True, iter=3, only_b=True, save_path=None):
+        if fwhm_cov is None:
+            fwhm_cov = self.fwhm_cov
+            if not isinstance(fwhm_cov, dict):
+                fwhm_cov = {j: fwhm_cov for j in range(self.nbands)}
+
+        if betajk is None:
+            betajk = self.get_betajk(idx, stype=stype, use_pixel_weights=use_pixel_weights, iter=iter, only_b=only_b)
+
+        betajk_mean = {j: np.array([masked_smoothing(betajk[j][nu] * self.mask_binary[j], fwhm=fwhm_cov[j]) for nu in range(len(self.freqs[j]))]) for j in range(self.nbands)}
+
+        comm = MPI.COMM_WORLD
+        size = comm.Get_size()
+        rank = comm.Get_rank()
+
+        betajk_cov = {}
+
+        for j in range(rank, self.nbands, size):
+            local_results = {}
+            for nu1, nu2 in combinations_with_replacement(self.freqs[j], 2):
+                m1 = betajk[j][self.freqs[j].index(nu1)] - betajk_mean[j][self.freqs[j].index(nu1)]
+                m2 = betajk[j][self.freqs[j].index(nu2)] - betajk_mean[j][self.freqs[j].index(nu2)]
+                local_results[(nu1, nu2)] = masked_smoothing(m1*m2*self.mask_binary[j], fwhm=fwhm_cov[j])
+            betajk_cov[j] = local_results
+
+        all_betajk_cov = comm.gather(betajk_cov, root=0)
+
+        if rank == 0:
+            final_cov = {}
+            for cov in all_betajk_cov:
+                final_cov.update(cov)
+
+            if save_path is not None:
+                np.save(save_path, final_cov, allow_pickle=True)
+
+            return final_cov
+
+        return None
 
     def cov2mat(self, cov):
         """
@@ -225,7 +265,7 @@ class NILC(object):
     def get_weights(self, betajk_cov=None, seds=None, cmb=True, tsz=False, cib=False):
         nc = sum([cmb, tsz, cib])
 
-        if betajk_cov is None:
+        if betajk_cov is None: 
             betajk_cov = self.get_betajk_cov()
             covmat = self.cov2mat(betajk_cov)
         else:
@@ -238,7 +278,7 @@ class NILC(object):
             seds = self.get_seds(cmb=cmb, tsz=tsz, cib=cib)
  
         weights = {j: np.zeros([self.npix[j],nc,self.nfreqs[j]]) for j in range(self.nbands)}
-        noise_pred = {j: np.zeros([self.npix[j],nc,]) for j in range(self.nbands)}
+        # noise_pred = {j: np.zeros([self.npix[j],nc,]) for j in range(self.nbands)}
 
         for j in range(self.nbands):
             c = np.transpose(covmat[j])
@@ -247,15 +287,64 @@ class NILC(object):
                 atc = np.dot(np.transpose(seds[j][pix]),cinv) 
                 atca = np.dot(atc,seds[j][pix])
                 iatca = np.linalg.inv(atca)
-                if nc > 1:
-                    noise_pred[j][pix] = np.asarray([np.sqrt(iatca[i,i]) for i in np.arange(nc)])
-                else:
-                    noise_pred[j][pix] = np.sqrt(iatca)
+                # if nc > 1:
+                #     noise_pred[j][pix] = np.asarray([np.sqrt(iatca[i,i]) for i in np.arange(nc)])
+                # else:
+                #     noise_pred[j][pix] = np.sqrt(iatca)
             
                 weights[j][pix] = np.dot(iatca,atc)
 
-        return weights, noise_pred
+        return weights#, noise_pred
     
+    def get_weights_parallel(self, betajk_cov=None, seds=None, cmb=True, tsz=False, cib=False):
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        size = comm.Get_size()
+        
+        nc = sum([cmb, tsz, cib])
+
+        if betajk_cov is None:
+            betajk_cov = self.get_betajk_cov_parallel()
+            covmat = self.cov2mat(betajk_cov)
+        else:
+            if isinstance(betajk_cov[0], dict):
+                covmat = self.cov2mat(betajk_cov)
+            else:
+                covmat = betajk_cov
+
+        if seds is None:
+            seds = self.get_seds(cmb=cmb, tsz=tsz, cib=cib)
+        
+        weights = {j: np.zeros([self.npix[j], nc, self.nfreqs[j]]) for j in range(self.nbands)}
+        
+        bands_per_process = np.ceil(self.nbands / size).astype(int)
+        start_band = rank * bands_per_process
+        end_band = min((rank + 1) * bands_per_process, self.nbands)
+        
+        for j in range(start_band, end_band):
+            c = np.transpose(covmat[j])
+            for pix in range(self.npix[j]):
+                cinv = np.linalg.inv(c[pix])
+                atc = np.dot(np.transpose(seds[j][pix]), cinv)
+                atca = np.dot(atc, seds[j][pix])
+                iatca = np.linalg.inv(atca)
+
+                weights[j][pix] = np.dot(iatca, atc)
+
+        # gather results from all processes
+        all_weights = {j: np.zeros([self.npix[j], nc, self.nfreqs[j]]) for j in range(self.nbands)}
+
+        for j in range(self.nbands):
+            if rank == 0:
+                comm.Gather(weights[j], all_weights[j], root=0)
+            else:
+                comm.Gather(weights[j], None, root=0)
+
+        if rank == 0:
+            return all_weights
+        else:
+            return None
+
     def plot_weights(self, weights):
         pass
 
