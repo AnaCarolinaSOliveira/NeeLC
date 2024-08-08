@@ -192,7 +192,7 @@ class NILC(object):
             for nu1, nu2 in combinations_with_replacement(self.freqs[j], 2):
                 m1 = betajk[j][self.freqs[j].index(nu1)] - betajk_mean[j][self.freqs[j].index(nu1)]
                 m2 = betajk[j][self.freqs[j].index(nu2)] - betajk_mean[j][self.freqs[j].index(nu2)]
-                local_results[(nu1, nu2)] = masked_smoothing(m1*m2*self.mask_binary[j], fwhm=fwhm_cov[j])
+                local_results[(nu1, nu2)] = np.array(masked_smoothing(m1*m2*self.mask_binary[j], fwhm=fwhm_cov[j]), dtype=np.float64)
             betajk_cov[j] = local_results
 
         all_betajk_cov = comm.gather(betajk_cov, root=0)
