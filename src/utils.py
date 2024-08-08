@@ -83,6 +83,21 @@ def masked_smoothing(U, fwhm=5.0, use_pixel_weights=True):
     WW = hp.smoothing(W, fwhm=np.radians(fwhm), use_pixel_weights=use_pixel_weights)
     return VV / WW
 
+def bin_spectrum(cl, new_edges):
+    sum_c = lambda l: (2*l + 1)*cl[l]
+    modes = lambda l: (2*l + 1)
+    pwr_binned = np.zeros([len(new_edges)-1])
+    for e in range(len(new_edges[:-1])):
+        bin_range = np.arange(new_edges[e],new_edges[e+1],1)
+        n_modes = 0
+        c_b = 0
+        for l in bin_range:
+            n_modes += modes(l)
+            c_b += sum_c(l)
+        pwr_binned[e] = c_b / n_modes
+
+    return pwr_binned
+
 def cl2dl(Cl, Lrange):
     factor = (Lrange*(Lrange+1))/(2*np.pi)
     return Cl*factor
