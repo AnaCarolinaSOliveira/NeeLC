@@ -95,8 +95,13 @@ def bin_spectrum(cl, new_edges):
             n_modes += modes(l)
             c_b += sum_c(l)
         pwr_binned[e] = c_b / n_modes
-
     return pwr_binned
+
+def rebin_array(array, newbins, oldbins):
+    array_rebin = np.zeros(newbins[-1]+1)
+    for i in range(len(array)):
+        array_rebin[oldbins[i]:oldbins[i+1]] = array[i]
+    return array_rebin
 
 def cl2dl(Cl, Lrange):
     factor = (Lrange*(Lrange+1))/(2*np.pi)
@@ -146,7 +151,7 @@ class DetSpecs(object):
             self.alpha = np.array([-3.0, -4.0, -4.0])
 
     def beam_function(self, L):
-        return np.transpose(np.array([np.exp(-((L[i]**2) * (self.sigma_beam**2))/2.) for i in range(len(L))]))
+        return np.exp(-0.5 * np.outer(L**2, self.sigma_beam**2)).T
     
     def noise_eff(self, L):
         if not isinstance(L, np.ndarray):

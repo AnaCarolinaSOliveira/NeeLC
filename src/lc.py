@@ -71,12 +71,12 @@ class LC(object):
     def getCov(self, noise=None, blind=False, cmb=True, tsz=True, cib=True):
         bands = self.bands
         if noise is None:
-            noise = self.noise
+            noise = self.noise.T
 
         covmat = np.zeros([self.nL,self.nb,self.nb])
 
         if blind:
-            tot_files = [f'./spt_sims/spt3g_{int(bands[b])}ghz_cmb_tszmasked_cib_noise_alms.fits' for b in np.arange(self.nb)]
+            tot_files = [f'./../input/spt3g_{int(bands[b])}ghz_cmb_tszmasked_cib_noise_alms.fits' for b in np.arange(self.nb)]
             total_alm = [hp.read_alm(filename=file) for file in tot_files]
 
             for i in np.arange(self.nb):
@@ -99,14 +99,14 @@ class LC(object):
 
             import pickle
             # getting tSZ and CIB spectra and rebinning 
-            with open('./spectra/agora_cib_tsz_autocross_spec.pk', 'rb') as file:
+            with open('./../input/agora_cib_tsz_autocross_spec.pk', 'rb') as file:
                 cib_tsz_data = pickle.load(file)
             cib_tsz_data = {i: {j: bin_spectrum(value, self.Le) for j, value in sub_dict.items()} for i, sub_dict in cib_tsz_data.items()}
 
             tsz_pwr = cib_tsz_data['tszxtsz']
             cib_pwr = cib_tsz_data['cibxcib']
             tszxcib_pwr = cib_tsz_data['cibxtsz']
-
+            
             for l in np.arange(self.nL):
                 for i in np.arange(self.nb):
                     freq_i = int(bands[i])
@@ -157,10 +157,10 @@ class LC(object):
     def weights(self, noise=None):
         seds = self.getSeds(cmb=self.cmb, tsz=self.tsz, cib=self.cib)
         if noise is None:
-            noise = self.noise
+            noise = self.noise.T
  
         bweights = np.zeros([self.nL,self.nc,self.nb])
-        noise_pred = np.zeros([self.nL,self.nc,])    
+        #noise_pred = np.zeros([self.nL,self.nc,])    
         covmat = self.getCov(noise=noise, blind=self.blind)
 
         for l in range(self.nL):
@@ -168,14 +168,14 @@ class LC(object):
             atw = np.dot(np.transpose(seds[l]),wmat)
             atwa = np.dot(atw,seds[l])
             iatwa = np.linalg.inv(atwa)
-            if self.nc > 1:
-                noise_pred[l] = np.asarray([np.sqrt(iatwa[i,i]) for i in np.arange(self.nc)])
-            else:
-                noise_pred[l] = np.sqrt(iatwa)
+            # if self.nc > 1:
+            #     noise_pred[l] = np.asarray([np.sqrt(iatwa[i,i]) for i in np.arange(self.nc)])
+            # else:
+            #     noise_pred[l] = np.sqrt(iatwa)
         
             bweights[l] = np.dot(iatwa,atw)
 
-        return bweights, noise_pred
+        return bweights#, noise_pred
     
     def separate(self, alm, weights=None, res=11, return_map=True):
         nside = 2**res
@@ -228,7 +228,7 @@ class LC(object):
             plt.loglog(Lrange, Dl_cmb_theory[2:] , color='gray', linestyle='--', label="CMB theory")
             plt.loglog(Lrange_binned, Dl_res, color='lightcoral', label="expected residuals")
         if comp == 'tSZ':
-            tsz_150_alm = hp.read_alm('./spt_sims/spt3g_150ghz_ltszNGbahamas80_uk_diffusioninp_alm.fits')
+            tsz_150_alm = hp.read_alm('./../input/spt3g_150ghz_ltszNGbahamas80_uk_diffusioninp_alm.fits')
             tsz_cl = hp.alm2cl(tsz_150_alm, lmax=self.lMax)
             Dl_tsz = cl2dl(tsz_cl[2:], Lrange=Lrange)
             plt.loglog(Lrange, Dl_tsz / (2.726e6 * f_sz(150))**2., color='gray', linestyle='--', label="Compton-y 150Ghz sim")
@@ -239,7 +239,7 @@ class LC(object):
         plt.title(title)
         plt.xlabel(r'$\ell$')
         if not savename is None:
-            plt.savefig(f'./output/{savename}.png', dpi=600, transparent=False)
+            plt.savefig(f'./../output/{savename}.png', dpi=600, transparent=False)
         plt.show()
         plt.close()
 
