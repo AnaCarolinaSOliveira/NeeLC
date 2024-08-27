@@ -1,6 +1,17 @@
 import numpy as np
 import healpy as hp
 
+####### constants ########
+
+T_CMB = 2.726 # K
+H_PLANCK = 6.626e-34 # Js
+K_B = 1.38065e-23 # J/K
+T_CIB = 25 # K
+C = 2.998e8 # m/s
+
+##########################
+
+
 def reduce_lmax(alm, lmax=4000, verbose=False):
     """
     (Stolen from Yuuki Omori)
@@ -111,25 +122,28 @@ def f_sz(nus):
     """
     Spectral dependence of the tSZ effect, for nus in GHz.
     """
-    t_cmb = 2.726 # K
-    h_planck = 6.626e-34 # Js
-    k_B = 1.38065e-23 # J/K
-
-    X = (h_planck * nus*1e9)/(k_B * t_cmb) 
+    X = (H_PLANCK * nus*1e9)/(K_B * T_CMB) 
     return X * (np.exp(X)+1.)/(np.exp(X)-1.) - 4.
 
 def f_cib(nus, beta):
     """
     Spectral dependence of the CIB, for nus in GHz.
     """
-    t_cmb = 2.726 # K
-    h_planck = 6.626e-34 # Js
-    k_B = 1.38065e-23 # J/K
-    t_cib = 25 # K
-
-    X = (h_planck * nus*1e9)/(k_B * t_cmb)  
-    F = (h_planck * nus*1e9)/(k_B * t_cib) 
+    X = (H_PLANCK * nus*1e9)/(K_B * T_CMB)  
+    F = (H_PLANCK * nus*1e9)/(K_B * T_CIB) 
     return  (nus**beta) * ((np.exp(X)-1.)**2.) / ((np.exp(F)-1.)*X*np.exp(X))
+
+def convert_MJy_per_sr_to_muK(map_jysr, nu):
+    """
+    Converts map in units of MJy/sr to thermodynamic units,
+    muK_CMB. Input nu must be in GHz.
+    """
+    def f(nu):
+        x = H_PLANCK * nu / (K_B * T_CMB)
+        return x**2 * np.exp(x) / np.expm1(x) ** 2
+
+    factor = (f(nu*1e9) * 2 * K_B * (nu*1e9)**2 / C**2) * 1e14 # MJy / sr / muK
+    return map_jysr / factor
 
 class DetSpecs(object):
 
@@ -149,6 +163,12 @@ class DetSpecs(object):
 
             self.l_knee = np.array([1200., 2200., 2300.])
             self.alpha = np.array([-3.0, -4.0, -4.0])
+
+        elif det=='Planck':
+            self.bands = np.array([30.,44.,70.,100.,143.,217.,353.,545.,857.]) # [GHz]
+            self.lfi_bands = self.bands[0:3] 
+            self.hfi_bands = self.bands[3:] 
+            self.nb = len(self.bands) # number of bands       
 
     def beam_function(self, L):
         return np.exp(-0.5 * np.outer(L**2, self.sigma_beam**2)).T
