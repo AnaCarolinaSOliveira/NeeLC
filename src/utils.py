@@ -153,10 +153,7 @@ class DetSpecs(object):
 
         if det=='SPT':
             self.bands = np.array([95.,150.,220.]) # [GHz]
-            self.nb = len(self.bands) # number of bands
             self.beam_size_fwhm_arcmin = np.array([1.57,1.17,1.04]) # in arcmin
-            self.beam_size_fwhm = arcmin2rad(self.beam_size_fwhm_arcmin)
-            self.sigma_beam = self.beam_size_fwhm / np.sqrt(8.*np.log(2.)) # fwhm to sigma
 
             self.white_noise_arcmin = np.array([3.0, 2.5, 8.9]) # in muK-arcmin
             self.white_noise = arcmin2rad(self.white_noise_arcmin)
@@ -168,7 +165,11 @@ class DetSpecs(object):
             self.bands = np.array([30.,44.,70.,100.,143.,217.,353.,545.,857.]) # [GHz]
             self.lfi_bands = self.bands[0:3] 
             self.hfi_bands = self.bands[3:] 
-            self.nb = len(self.bands) # number of bands       
+            self.beam_size_fwhm_arcmin = np.array([32.29,27.94,13.08,9.66,7.22,4.90,4.92,4.67,4.22]) # in arcmin
+            
+        self.nb = len(self.bands) # number of bands     
+        self.beam_size_fwhm = arcmin2rad(self.beam_size_fwhm_arcmin)
+        self.sigma_beam = self.beam_size_fwhm / np.sqrt(8.*np.log(2.)) # fwhm to sigma  
 
     def beam_function(self, L):
         return np.exp(-0.5 * np.outer(L**2, self.sigma_beam**2)).T
