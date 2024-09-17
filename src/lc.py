@@ -68,71 +68,88 @@ class LC(object):
         
         return seds 
     
-    def getCov(self, noise=None, blind=False, cmb=True, tsz=True, cib=True):
+    def getCov(self, alms=None, noise=None, blind=False, cmb=True, tsz=True, cib=True):
         bands = self.bands
-        if noise is None:
-            noise = self.noise.T
 
-        covmat = np.zeros([self.nL,self.nb,self.nb])
+        if alms is None:
+            if noise is None:
+                noise = self.noise.T
 
-        if blind:
-            tot_files = [f'./../input/spt3g_{int(bands[b])}ghz_cmb_tszmasked_cib_noise_alms.fits' for b in np.arange(self.nb)]
-            total_alm = [hp.read_alm(filename=file) for file in tot_files]
+            covmat = np.zeros([self.nL,self.nb,self.nb])
+            if blind:
+                spt_files = [f'./../input/spt3g_{int(bands[b])}ghz_cmb_tszmasked_cib_noise_alms.fits' for b in np.arange(self.nb)]
+                spt_alms = [hp.read_alm(filename=file) for file in spt_files]
+                spt = DetSpecs(det='SPT')
+                noise_eff = spt.noise_eff(np.arange(5000))
+                noise_alms = [hp.synalm(i, lmax=5000) for i in noise_eff]
+                total_alms = [spt_alms[b] + noise_alms[b] for b in np.arange(self.nb)]
 
+                for i in np.arange(self.nb):
+                    for j in np.arange(self.nb):
+                        if i != j:
+                            cl = hp.alm2cl(alms1=total_alms[i], alms2=total_alms[j], lmax_out=self.lMax)
+                        else:
+                            cl = hp.alm2cl(total_alms[i], lmax_out=self.lMax)
+                        cl_binned = bin_spectrum(pwr_spectrum=cl, new_edges=self.Le) 
+                        for ell in np.arange(self.nL):
+                            covmat[ell,i,j] = cl_binned[ell]
+
+            else:
+                import camb
+                pars = camb.set_params(H0=67.36, ombh2=0.022, omch2=0.12, mnu=0.06, omk=0, 
+                                        tau=0.0544, As=2.1e-9, ns=0.965, halofit_version='mead', lmax=int(self.lMax))
+                results = camb.get_results(pars)
+                cl_cmb_th = results.get_cmb_power_spectra(pars, lmax=self.lMax, CMB_unit='muK', raw_cl=True)['total'][:,0] # in muK^2
+                c_cmb = bin_spectrum(cl_cmb_th, self.Le) # rebinning theory CMB to bin edges for weight calculation
+
+                import pickle
+                # getting tSZ and CIB spectra and rebinning 
+                with open('./../input/agora_cib_tsz_autocross_spec.pk', 'rb') as file:
+                    cib_tsz_data = pickle.load(file)
+                cib_tsz_data = {i: {j: bin_spectrum(value, self.Le) for j, value in sub_dict.items()} for i, sub_dict in cib_tsz_data.items()}
+
+                tsz_pwr = cib_tsz_data['tszxtsz']
+                cib_pwr = cib_tsz_data['cibxcib']
+                tszxcib_pwr = cib_tsz_data['cibxtsz']
+                
+                for l in np.arange(self.nL):
+                    for i in np.arange(self.nb):
+                        freq_i = int(bands[i])
+
+                        # noise uncorrelated between bands 
+                        covmat[l,i,i] += noise[l,i]
+
+                        for j in np.arange(self.nb):
+                            freq_j = int(bands[j])
+                            if cmb:
+                                # CMB 
+                                covmat[l,i,j] += c_cmb[l] 
+                            if cib:
+                                # CIB x CIB
+                                c_cib = cib_pwr[f'{freq_i}x{freq_j}']
+                                covmat[l,i,j] += c_cib[l]
+                            if tsz:
+                                # tSZ x tSZ
+                                c_tsz = tsz_pwr[f'{freq_i}x{freq_j}']
+                                covmat[l,i,j] += c_tsz[l]
+                            if tsz and cib:
+                                # CIB x tSZ
+                                c_cibtsz = tszxcib_pwr[f'{freq_i}x{freq_j}']
+                                covmat[l,i,j] += c_cibtsz[l]
+                                c_cibtsz = tszxcib_pwr[f'{freq_j}x{freq_i}']
+                                covmat[l,i,j] += c_cibtsz[l]
+        
+        else:
+            covmat = np.zeros([self.nL,self.nb,self.nb])
             for i in np.arange(self.nb):
                 for j in np.arange(self.nb):
                     if i != j:
-                        cl = hp.alm2cl(alms1=total_alm[i], alms2=total_alm[j], lmax=self.lMax)
+                        cl = hp.alm2cl(alms1=alms[i], alms2=alms[j], lmax_out=self.lMax)
                     else:
-                        cl = hp.alm2cl(total_alm[i], lmax=self.lMax)
+                        cl = hp.alm2cl(alms[i], lmax_out=self.lMax)
                     cl_binned = bin_spectrum(pwr_spectrum=cl, new_edges=self.Le) 
                     for ell in np.arange(self.nL):
                         covmat[ell,i,j] = cl_binned[ell]
-
-        else:
-            import camb
-            pars = camb.set_params(H0=67.36, ombh2=0.022, omch2=0.12, mnu=0.06, omk=0, 
-                                    tau=0.0544, As=2.1e-9, ns=0.965, halofit_version='mead', lmax=int(self.lMax))
-            results = camb.get_results(pars)
-            cl_cmb_th = results.get_cmb_power_spectra(pars, lmax=self.lMax, CMB_unit='muK', raw_cl=True)['total'][:,0] # in muK^2
-            c_cmb = bin_spectrum(cl_cmb_th, self.Le) # rebinning theory CMB to bin edges for weight calculation
-
-            import pickle
-            # getting tSZ and CIB spectra and rebinning 
-            with open('./../input/agora_cib_tsz_autocross_spec.pk', 'rb') as file:
-                cib_tsz_data = pickle.load(file)
-            cib_tsz_data = {i: {j: bin_spectrum(value, self.Le) for j, value in sub_dict.items()} for i, sub_dict in cib_tsz_data.items()}
-
-            tsz_pwr = cib_tsz_data['tszxtsz']
-            cib_pwr = cib_tsz_data['cibxcib']
-            tszxcib_pwr = cib_tsz_data['cibxtsz']
-            
-            for l in np.arange(self.nL):
-                for i in np.arange(self.nb):
-                    freq_i = int(bands[i])
-
-                    # noise uncorrelated between bands 
-                    covmat[l,i,i] += noise[l,i]
-
-                    for j in np.arange(self.nb):
-                        freq_j = int(bands[j])
-                        if cmb:
-                            # CMB 
-                            covmat[l,i,j] += c_cmb[l] 
-                        if cib:
-                            # CIB x CIB
-                            c_cib = cib_pwr[f'{freq_i}x{freq_j}']
-                            covmat[l,i,j] += c_cib[l]
-                        if tsz:
-                            # tSZ x tSZ
-                            c_tsz = tsz_pwr[f'{freq_i}x{freq_j}']
-                            covmat[l,i,j] += c_tsz[l]
-                        if tsz and cib:
-                            # CIB x tSZ
-                            c_cibtsz = tszxcib_pwr[f'{freq_i}x{freq_j}']
-                            covmat[l,i,j] += c_cibtsz[l]
-                            c_cibtsz = tszxcib_pwr[f'{freq_j}x{freq_i}']
-                            covmat[l,i,j] += c_cibtsz[l]
 
         return covmat
  
@@ -146,7 +163,7 @@ class LC(object):
         output alms for the component.
         """
         cov_res = self.getCov(blind=False, cmb=cmb, tsz=tsz, cib=cib)
-        cl_res = np.zeros([self.nc,self.nL])
+        cl_res = np.zeros([self.nc,self.nL]) 
         for c in range(weights.shape[1]):
             for l in range(self.nL):
                 cl_res[c][l] = np.dot(np.transpose(weights[l][c]), np.dot(cov_res[l], weights[l][c]))
@@ -154,14 +171,17 @@ class LC(object):
         return cl_res
     
 
-    def weights(self, noise=None):
+    def weights(self, cov=None, noise=None):
         seds = self.getSeds(cmb=self.cmb, tsz=self.tsz, cib=self.cib)
         if noise is None:
             noise = self.noise.T
  
+        if cov is None:
+            covmat = self.getCov(noise=noise, blind=self.blind)
+        else:
+            covmat = cov
+        
         bweights = np.zeros([self.nL,self.nc,self.nb])
-        #noise_pred = np.zeros([self.nL,self.nc,])    
-        covmat = self.getCov(noise=noise, blind=self.blind)
 
         for l in range(self.nL):
             wmat = np.linalg.inv(covmat[l])
