@@ -4,10 +4,10 @@ import healpy as hp
 ####### constants ########
 
 T_CMB = 2.726 # K
-H_PLANCK = 6.626e-34 # Js
-K_B = 1.38065e-23 # J/K
+H_PLANCK = 6.62607004e-34 # Js
+K_B = 1.38064852e-23 # J/K
 T_CIB = 25 # K
-C = 2.998e8 # m/s
+C = 2.99792458e8 # m/s
 
 ##########################
 
