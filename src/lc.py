@@ -90,7 +90,7 @@ class LC(object):
                             cl = hp.alm2cl(alms1=total_alms[i], alms2=total_alms[j], lmax_out=self.lMax)
                         else:
                             cl = hp.alm2cl(total_alms[i], lmax_out=self.lMax)
-                        cl_binned = bin_spectrum(pwr_spectrum=cl, new_edges=self.Le) 
+                        cl_binned = bin_spectrum(cl, self.Le) 
                         for ell in np.arange(self.nL):
                             covmat[ell,i,j] = cl_binned[ell]
 
@@ -147,7 +147,7 @@ class LC(object):
                         cl = hp.alm2cl(alms1=alms[i], alms2=alms[j], lmax_out=self.lMax)
                     else:
                         cl = hp.alm2cl(alms[i], lmax_out=self.lMax)
-                    cl_binned = bin_spectrum(pwr_spectrum=cl, new_edges=self.Le) 
+                    cl_binned = bin_spectrum(cl, self.Le) 
                     for ell in np.arange(self.nL):
                         covmat[ell,i,j] = cl_binned[ell]
 
