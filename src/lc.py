@@ -8,7 +8,7 @@ from utils import *
 
 class LC(object):
 
-    def __init__(self, lMin=0, lMax=5000, nL=200, cmb=True, tsz=True, cib=True, blind=False):
+    def __init__(self, bands, lMin=0, lMax=5000, nL=200, cmb=True, tsz=True, cib=True, blind=False):
         
         # setting up ell-space
         self.lMin = lMin
@@ -32,9 +32,10 @@ class LC(object):
         self.nc = sum([cmb, tsz, cib])
 
         # detector specifics
+        self.bands = bands
+        self.nb = len(self.bands)
+        
         spt = DetSpecs(det='SPT')
-        self.bands = spt.bands
-        self.nb = spt.nb
         self.noise = spt.noise_eff(L=self.Lc)
 
         self.blind = blind
