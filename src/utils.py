@@ -1,5 +1,7 @@
 import numpy as np
 import healpy as hp
+import os, sys
+from astropy.io import fits
 
 ####### constants ########
 
@@ -147,11 +149,11 @@ def convert_MJy_per_sr_to_muK(map_jysr, nu):
 
 class DetSpecs(object):
 
-    def __init__(self, det='SPT'):
+    def __init__(self, det='SPT3G'):
 
         self.det = det
 
-        if det=='SPT':
+        if det=='SPT3G':
             self.bands = np.array([95.,150.,220.]) # [GHz]
             self.beam_size_fwhm_arcmin = np.array([1.57,1.17,1.04]) # in arcmin
 
@@ -185,3 +187,36 @@ class DetSpecs(object):
         noise_eff = np.where(np.isinf(noise_eff), 0, noise_eff)
 
         return noise_eff
+    
+    def load_bandpass(self, freq):
+
+        # Frequency in GHz
+        nu = (np.arange(40000)+1)
+    
+        if self.det == 'SPT3G':
+
+            if ((freq==95)  or (freq==150) or (freq==220)):
+                f     = f'../input/spt3g_bandpass_{freq}GHz_2019.txt'
+                ffile = os.path.abspath(os.path.join(os.getcwd(), f))
+                with open(ffile, 'r') as file:
+                    lines = [line.split() for line in file.readlines()[5:]]
+                ff = np.array([float(line[0]) for line in lines])
+                tt = np.array([float(line[1]) for line in lines])
+                tt[tt < 0] = 0
+                bpass = np.interp(nu,ff,tt,left=0,right=0)
+            else:
+                sys.exit('frequency must be 95/150/220 for spt3g')
+        
+        if self.det == 'Planck':
+            if ((freq==100) or (freq==143) or (freq==217) or (freq==353) or (freq==545) or (freq==857)):
+                f     = '../input/HFI_RIMO_R3.00.fits'
+                current_dir = os.getcwd()
+                ffile = os.path.abspath(os.path.join(current_dir, f))
+                d     = fits.open(ffile)
+                ff = d[f'BANDPASS_F{freq}'].data['WAVENUMBER'] * 3e8 * 1e-7  # Wavenumber in units of cm^-1
+                tt = d[f'BANDPASS_F{freq}'].data['TRANSMISSION']
+                bpass = np.interp(nu,ff,tt,left=0,right=0)
+            else:
+                sys.exit('frequency must be 100/143/217/353/545/857 for planck')
+        
+        return nu,bpass

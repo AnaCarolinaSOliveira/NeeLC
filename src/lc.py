@@ -40,29 +40,50 @@ class LC(object):
 
     def getSeds(self, cmb, tsz, cib):
         bands = self.bands
-        seds = np.zeros([self.nL, self.nb, self.nc])
+        nc = sum([cmb, tsz, cib])
+        seds = np.zeros([self.nL, self.nb, nc])
 
         t_cmb_muk = 2.726e6 # muK
 
+        def tsz_sed(nus):
+            sed = np.zeros(len(nus))
+
+            for idx, nu in enumerate(nus):
+                if (int(nu)==95 or int(nu)==150 or int(nu)==220):
+                    spt = DetSpecs(det='SPT3G')
+                    freqs, b = spt.load_bandpass(int(nu))
+                elif ((nu==100) or (nu==143) or (nu==217) or (nu==353) or (nu==545) or (nu==857)):
+                    planck = DetSpecs(det='Planck')
+                    freqs, b = planck.load_bandpass(int(nu))
+                tszfac = t_cmb_muk * f_sz(freqs)  # tSZ spectral dependence
+                tszfac[np.isinf(tszfac)] = 0
+                sed[idx] = np.sum(b * tszfac) / np.sum(b)
+
+            return sed
+        
+        def cib_sed(nus):
+            # TODO implement bandpass corrections to CIB as well later
+            beta_p = 1.48
+            beta_cl = 2.23
+            cibfac = t_cmb_muk * f_cib(nus, beta_p) # using poisson term only, for now
+            cibfac_norm = cibfac / 1 # cibfac[1]
+            return cibfac_norm
+        
         idx=0
         if cmb:
             seds[:,:,idx] = 1.
             idx+=1
 
         if tsz:
-            tszfac = t_cmb_muk * f_sz(bands) # tSZ spectral dependence, in compton y units 
-            tszfac_norm = tszfac #/ tszfac[1] 
+            tszfac = tsz_sed(bands) # tSZ spectral dependence, in compton y units 
             for b in range(len(bands)):
-                seds[:,b,idx] = tszfac_norm[b]
+                seds[:,b,idx] = tszfac[b]
             idx+=1
 
         if cib:
-            beta_p = 1.48
-            beta_cl = 2.23
-            cibfac = t_cmb_muk * f_cib(bands, beta_p) # using poisson term only, for now
-            cibfac_norm = cibfac #/ cibfac[1]
+            cibfac = cib_sed(bands) # using poisson term only, for now
             for b in range(len(bands)):
-                seds[:,b,idx] = cibfac_norm[b]
+                seds[:,b,idx] = cibfac[b]
             idx+=1
         
         return seds 

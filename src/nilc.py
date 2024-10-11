@@ -2,7 +2,7 @@ import numpy as np
 import healpy as hp
 from itertools import combinations_with_replacement
 
-from utils import masked_smoothing, f_sz, f_cib
+from utils import *
 
 
 class NILC(object):
@@ -10,6 +10,7 @@ class NILC(object):
     Perform the Needlet Internal Linear Combination (NILC) analysis.
     """
     def __init__(self, need, freqs, beams, eff_fwhm=20., beam_thresh=0.01, fwhm_cov=None, mask=None):
+        # TODO maybe implement a det_freqs, disctionary with the name of the det and the frequencies we're using
         """
         Initialize the NILC class.
 
@@ -190,11 +191,23 @@ class NILC(object):
         t_cmb_muk = 2.726e6 # muK
         
         def tsz_sed(nus):
-            tszfac = t_cmb_muk * f_sz(nus) # tSZ spectral dependence, in compton y units 
-            tszfac_norm = tszfac / 1 # tszfac[1] 
-            return tszfac_norm
+            sed = np.zeros(len(nus))
+
+            for idx, nu in enumerate(nus):
+                if (int(nu)==95 or int(nu)==150 or int(nu)==220):
+                    spt = DetSpecs(det='SPT3G')
+                    freqs, b = spt.load_bandpass(nu)
+                elif ((nu==100) or (nu==143) or (nu==217) or (nu==353) or (nu==545) or (nu==857)):
+                    planck = DetSpecs(det='Planck')
+                    freqs, b = planck.load_bandpass(nu)
+                tszfac = t_cmb_muk * f_sz(freqs)  # tSZ spectral dependence
+                tszfac[np.isinf(tszfac)] = 0
+                sed[idx] = np.sum(b * tszfac) / np.sum(b)
+
+            return sed
         
         def cib_sed(nus):
+            # TODO implement bandpass corrections to CIB as well later
             beta_p = 1.48
             beta_cl = 2.23
             cibfac = t_cmb_muk * f_cib(nus, beta_p) # using poisson term only, for now
