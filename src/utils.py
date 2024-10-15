@@ -60,7 +60,9 @@ def calculate_nside(l):
     int or array-like: The smallest power of 2 greater than l/2.
     """
     l = np.atleast_1d(l)
-    return 2 ** np.ceil(np.log2(l / 2)).astype(int)
+    # return 2 ** np.ceil(np.log2(l / 2)).astype(int)
+    nside = 2 ** np.ceil(np.log2(l / 2)).astype(int)
+    return np.maximum(nside, 32)
 
 
 def arcmin2rad(arcmin):
@@ -134,6 +136,13 @@ def f_cib(nus, beta):
     X = (H_PLANCK * nus*1e9)/(K_B * T_CMB)  
     F = (H_PLANCK * nus*1e9)/(K_B * T_CIB) 
     return  (nus**beta) * ((np.exp(X)-1.)**2.) / ((np.exp(F)-1.)*X*np.exp(X))
+
+def dBdT_sz(nus):
+    X = (H_PLANCK * nus*1e9)/(K_B * T_CMB)  
+    factor_1 = 2*H_PLANCK*((nus*1e9)**3)/(C**2)
+    factor_2 = X / T_CMB
+    exp_term = (np.exp(X)) / (np.exp(X) - 1)**2
+    return factor_1 * factor_2 * exp_term
 
 def convert_MJy_per_sr_to_muK(map_jysr, nu):
     """
