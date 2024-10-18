@@ -1,7 +1,6 @@
 import numpy as np
 import healpy as hp
 from itertools import combinations_with_replacement
-
 from utils import *
 
 
@@ -188,9 +187,10 @@ class NILC(object):
         nc = sum([cmb, tsz, cib])
         seds = {j: np.zeros([self.npix[j], self.nfreqs[j], nc]) for j in range(self.nbands)}
 
-        t_cmb_muk = 2.726e6 # muK
+        t_cmb_muk = 2.7255e6 # muK
         
         def tsz_sed(nus):
+
             sed = np.zeros(len(nus))
 
             for idx, nu in enumerate(nus):
@@ -200,9 +200,10 @@ class NILC(object):
                 elif ((nu==100) or (nu==143) or (nu==217) or (nu==353) or (nu==545) or (nu==857)):
                     planck = DetSpecs(det='Planck')
                     freqs, b = planck.load_bandpass(nu)
+                dbdt = dBdT(freqs)
                 tszfac = t_cmb_muk * f_sz(freqs)  # tSZ spectral dependence
                 tszfac[np.isinf(tszfac)] = 0
-                sed[idx] = np.sum(b * tszfac) / np.sum(b)
+                sed[idx] = np.trapz(b * tszfac * dbdt, freqs) / np.trapz(b * dbdt, freqs)
 
             return sed
         

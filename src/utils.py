@@ -2,10 +2,11 @@ import numpy as np
 import healpy as hp
 import os, sys
 from astropy.io import fits
+import pickle 
 
 ####### constants ########
 
-T_CMB = 2.726 # K
+T_CMB = 2.7255 # K
 H_PLANCK = 6.62607004e-34 # Js
 K_B = 1.38064852e-23 # J/K
 T_CIB = 25 # K
@@ -137,12 +138,11 @@ def f_cib(nus, beta):
     F = (H_PLANCK * nus*1e9)/(K_B * T_CIB) 
     return  (nus**beta) * ((np.exp(X)-1.)**2.) / ((np.exp(F)-1.)*X*np.exp(X))
 
-def dBdT_sz(nus):
+def dBdT(nus):
     X = (H_PLANCK * nus*1e9)/(K_B * T_CMB)  
-    factor_1 = 2*H_PLANCK*((nus*1e9)**3)/(C**2)
-    factor_2 = X / T_CMB
+    factor = 2 * H_PLANCK * ((nus*1e9)**3) * X / (C**2) / T_CMB
     exp_term = (np.exp(X)) / (np.exp(X) - 1)**2
-    return factor_1 * factor_2 * exp_term
+    return factor * exp_term
 
 def convert_MJy_per_sr_to_muK(map_jysr, nu):
     """
@@ -205,12 +205,29 @@ class DetSpecs(object):
         if self.det == 'SPT3G':
 
             if ((freq==95)  or (freq==150) or (freq==220)):
-                f     = f'../input/spt3g_bandpass_{freq}GHz_2019.txt'
+                # f     = f'../input/spt3g_bandpass_{freq}GHz_2019.txt' # up-to-date SPT3G bandpasses
+                # ffile = os.path.abspath(os.path.join(os.getcwd(), f))
+                # with open(ffile, 'r') as file:
+                #     lines = [line.split() for line in file.readlines()[5:]]
+                # ff = np.array([float(line[0]) for line in lines])
+                # tt = np.array([float(line[1]) for line in lines])
+
+                # f     = f'../input/2019_fts_science_bands.pkl' # up-to-date SPT3G bandpasses
+                # ffile = os.path.abspath(os.path.join(os.getcwd(), f))
+                # with open(ffile, 'rb') as file:
+                #     data = pickle.load(file)
+                # if freq == 95:
+                #     freq = 90
+                # ff = data['bandpasses']['focal_plane_average'][str(freq)]['freq']
+                # tt = data['bandpasses']['focal_plane_average'][str(freq)]['spectrum']
+
+                f     = f'../input/focal_plane_averaged_spectra.pkl' # bandpasses in Agora sims, DO NOT use for SPT3G analysis
                 ffile = os.path.abspath(os.path.join(os.getcwd(), f))
-                with open(ffile, 'r') as file:
-                    lines = [line.split() for line in file.readlines()[5:]]
-                ff = np.array([float(line[0]) for line in lines])
-                tt = np.array([float(line[1]) for line in lines])
+                tmp   = pickle.load( open(ffile, "rb" ) )
+                if freq == 95:
+                    freq = 90
+                ff    = tmp[str(freq)]['real_sky_correct']['freq']
+                tt    = tmp[str(freq)]['real_sky_correct']['spec']
                 tt[tt < 0] = 0
                 bpass = np.interp(nu,ff,tt,left=0,right=0)
             else:
