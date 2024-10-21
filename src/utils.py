@@ -123,12 +123,35 @@ def cl2dl(Cl, Lrange):
     factor = (Lrange*(Lrange+1))/(2*np.pi)
     return Cl*factor
 
-def f_sz(nus):
+def f_sz(nus, bandpassed=False):
     """
     Spectral dependence of the tSZ effect, for nus in GHz.
     """
-    X = (H_PLANCK * nus*1e9)/(K_B * T_CMB) 
-    return X * (np.exp(X)+1.)/(np.exp(X)-1.) - 4.
+    if isinstance(nus, int):
+        nus = np.array([nus])
+
+    if bandpassed:
+        f_sz_bp = np.zeros(len(nus))
+        for idx, nu in enumerate(nus):
+            print(nu)
+            if int(nu) in [95, 150, 220]:
+                spt = DetSpecs(det='SPT3G')
+                freqs, b = spt.load_bandpass(nu)
+            elif nu in [100, 143, 217, 353, 545, 857]:
+                planck = DetSpecs(det='Planck')
+                freqs, b = planck.load_bandpass(nu)
+            X = (H_PLANCK * freqs*1e9)/(K_B * T_CMB)
+            fsz = X * (np.exp(X)+1.)/(np.exp(X)-1.) - 4.
+            valid_mask = ~np.isnan(fsz) & ~np.isinf(fsz)            
+            if np.any(valid_mask):
+                f_sz_bp[idx] = np.trapz(b[valid_mask] * fsz[valid_mask], freqs[valid_mask]) / np.trapz(b[valid_mask], freqs[valid_mask])
+            else:
+                f_sz_bp[idx] = np.nan
+        return f_sz_bp
+    else:
+        X = (H_PLANCK * nus*1e9)/(K_B * T_CMB) 
+        return X * (np.exp(X)+1.)/(np.exp(X)-1.) - 4.
+    
 
 def f_cib(nus, beta):
     """
@@ -204,7 +227,7 @@ class DetSpecs(object):
     
         if self.det == 'SPT3G':
 
-            if ((freq==95)  or (freq==150) or (freq==220)):
+            if int(freq) in [95, 150, 220]:
                 # f     = f'../input/spt3g_bandpass_{freq}GHz_2019.txt' # up-to-date SPT3G bandpasses
                 # ffile = os.path.abspath(os.path.join(os.getcwd(), f))
                 # with open(ffile, 'r') as file:
@@ -234,7 +257,7 @@ class DetSpecs(object):
                 sys.exit('frequency must be 95/150/220 for spt3g')
         
         if self.det == 'Planck':
-            if ((freq==100) or (freq==143) or (freq==217) or (freq==353) or (freq==545) or (freq==857)):
+            if freq in [100, 143, 217, 353, 545, 857]:
                 f     = '../input/HFI_RIMO_R3.00.fits'
                 current_dir = os.getcwd()
                 ffile = os.path.abspath(os.path.join(current_dir, f))
