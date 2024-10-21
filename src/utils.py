@@ -133,7 +133,6 @@ def f_sz(nus, bandpassed=False):
     if bandpassed:
         f_sz_bp = np.zeros(len(nus))
         for idx, nu in enumerate(nus):
-            print(nu)
             if int(nu) in [95, 150, 220]:
                 spt = DetSpecs(det='SPT3G')
                 freqs, b = spt.load_bandpass(nu)

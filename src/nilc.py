@@ -212,8 +212,7 @@ class NILC(object):
             beta_p = 1.48
             beta_cl = 2.23
             cibfac = t_cmb_muk * f_cib(nus, beta_p) # using poisson term only, for now
-            cibfac_norm = cibfac / 1 # cibfac[1]
-            return cibfac_norm
+            return cibfac
         
         for j in range(self.nbands):
             freqs = np.array(self.freqs[j], dtype=int)
@@ -223,15 +222,15 @@ class NILC(object):
                 idx+=1
 
             if tsz:
-                tszfac_norm = tsz_sed(freqs)
+                tszfac = tsz_sed(freqs)
                 for b in range(len(freqs)):
-                    seds[j][:,b,idx] = tszfac_norm[b]
+                    seds[j][:,b,idx] = tszfac[b]
                 idx+=1
 
             if cib:
-                cibfac_norm = cib_sed(freqs)
+                cibfac = cib_sed(freqs)
                 for b in range(len(freqs)):
-                    seds[j][:,b,idx] = cibfac_norm[b]
+                    seds[j][:,b,idx] = cibfac[b]
                 idx+=1
         
         return seds 
@@ -252,7 +251,6 @@ class NILC(object):
             seds = self.get_seds(cmb=cmb, tsz=tsz, cib=cib)
  
         weights = {j: np.zeros([self.npix[j],nc,self.nfreqs[j]]) for j in range(self.nbands)}
-        # noise_pred = {j: np.zeros([self.npix[j],nc,]) for j in range(self.nbands)}
 
         for j in range(self.nbands):
             c = np.transpose(covmat[j])
@@ -261,18 +259,10 @@ class NILC(object):
                 atc = np.dot(np.transpose(seds[j][pix]),cinv) 
                 atca = np.dot(atc,seds[j][pix])
                 iatca = np.linalg.inv(atca)
-                # if nc > 1:
-                #     noise_pred[j][pix] = np.asarray([np.sqrt(iatca[i,i]) for i in np.arange(nc)])
-                # else:
-                #     noise_pred[j][pix] = np.sqrt(iatca)
-            
                 weights[j][pix] = np.dot(iatca,atc)
 
-        return weights#, noise_pred
-    
+        return weights
 
-    def plot_weights(self, weights):
-        pass
 
     def separate_betajk(self, betajk, weights=None, use_pixel_weights=True):
         # if no weights are provided, the MV weights for CMB are going to be set as default
