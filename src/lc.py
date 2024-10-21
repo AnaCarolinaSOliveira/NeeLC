@@ -43,7 +43,7 @@ class LC(object):
         nc = sum([cmb, tsz, cib])
         seds = np.zeros([self.nL, self.nb, nc])
 
-        t_cmb_muk = 2.726e6 # muK
+        t_cmb_muk = 2.7255e6 # muK
 
         def tsz_sed(nus):
             sed = np.zeros(len(nus))
@@ -55,9 +55,10 @@ class LC(object):
                 elif ((nu==100) or (nu==143) or (nu==217) or (nu==353) or (nu==545) or (nu==857)):
                     planck = DetSpecs(det='Planck')
                     freqs, b = planck.load_bandpass(int(nu))
+                dbdt = dBdT(freqs)
                 tszfac = t_cmb_muk * f_sz(freqs)  # tSZ spectral dependence
                 tszfac[np.isinf(tszfac)] = 0
-                sed[idx] = np.sum(b * tszfac) / np.sum(b)
+                sed[idx] = np.trapz(b * tszfac * dbdt, freqs) / np.trapz(b * dbdt, freqs)
 
             return sed
         
