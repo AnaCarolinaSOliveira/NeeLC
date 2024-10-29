@@ -306,7 +306,8 @@ class DetSpecs(object):
                 # tt = data['bandpasses']['focal_plane_average'][str(freq)]['spectrum']
 
                 f     = f'../input/focal_plane_averaged_spectra.pkl' # bandpasses in Agora sims, DO NOT use for SPT3G analysis
-                ffile = os.path.abspath(os.path.join(os.getcwd(), f))
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+                ffile = os.path.join(base_dir, f)
                 tmp   = pickle.load( open(ffile, "rb" ) )
                 if freq == 95:
                     freq = 90
@@ -320,8 +321,8 @@ class DetSpecs(object):
         if self.det == 'Planck':
             if freq in [100, 143, 217, 353, 545, 857]:
                 f     = '../input/HFI_RIMO_R3.00.fits'
-                current_dir = os.getcwd()
-                ffile = os.path.abspath(os.path.join(current_dir, f))
+                base_dir = os.path.dirname(os.path.abspath(__file__))                
+                ffile = os.path.join(base_dir, f)
                 d     = fits.open(ffile)
                 ff = d[f'BANDPASS_F{freq}'].data['WAVENUMBER'] * 3e8 * 1e-7  # Wavenumber in units of cm^-1
                 tt = d[f'BANDPASS_F{freq}'].data['TRANSMISSION']
