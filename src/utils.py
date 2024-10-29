@@ -123,6 +123,7 @@ def cl2dl(Cl, Lrange):
     factor = (Lrange*(Lrange+1))/(2*np.pi)
     return Cl*factor
 
+
 def f_sz(nus, bandpassed=False):
     """
     Spectral dependence of the tSZ effect, for nus in GHz.
@@ -178,9 +179,64 @@ def convert_MJy_per_sr_to_muK(map_jysr, nu):
     factor = (f(nu*1e9) * 2 * K_B * (nu*1e9)**2 / C**2) * 1e14 # MJy / sr / muK
     return map_jysr / factor
 
+
+########## Transfer function ##########
+
+def almtf2d(tf, lmax, lmin=0, mmin=0, bl=None):
+    """
+    From Kimmy Wu.
+    
+    bl: 1D B(ell), start at ell=0    
+    """
+
+    tf2d = np.zeros([lmax+1,lmax+1])
+    #fill non-zero (l,m) with ones
+    for l in range(0,lmax+1):
+        tf2d[0:l+1 , l] = 1.0
+        
+    tf2d *= tf[None, :]
+    
+    if bl is not None:
+        tf2d *= bl[None, :]
+
+    tf2d[:mmin,:] = 0
+    tf2d[:,:lmin] = 0
+
+    return tf2d
+
+def grid2alm(grid):
+    """
+    From Kimmy Wu.
+    
+    Convert 2d grid back to Healpix alm
+    """
+    lmax = grid.shape[0]-1
+    alm=np.zeros(hp.Alm.getsize(lmax),dtype=np.complex_)
+    for l in range(0,lmax+1):
+        for m in range(0,l+1):
+            # l,m
+            alm[hp.Alm.getidx(lmax,l,m)]=grid[m,l]
+            #alm[hp.Alm.getidx(lmax,i,np.arange(i+1)-1)]=grid[:i+1,i]
+    return alm
+
+def get_tfalm(tf, lmin, lmax, mmin, bl=None):
+    """
+    Returns the transfer function alm. If bl is provided, 
+    the object returned is the TF already convolved with
+    the beam.
+    """
+    tf2d = almtf2d(tf, lmax, lmin=lmin,
+              mmin=mmin, bl=bl)
+    tfalm = grid2alm(tf2d)
+    return tfalm
+
+
+#######################################
+
+
 class DetSpecs(object):
 
-    def __init__(self, det='SPT3G'):
+    def __init__(self, det):
 
         self.det = det
 
@@ -203,6 +259,12 @@ class DetSpecs(object):
         self.nb = len(self.bands) # number of bands     
         self.beam_size_fwhm = arcmin2rad(self.beam_size_fwhm_arcmin)
         self.sigma_beam = self.beam_size_fwhm / np.sqrt(8.*np.log(2.)) # fwhm to sigma  
+
+    def transfer_function(self, L):
+        if self.det=='SPT3G':
+            return np.exp(-((6000-L)/6600)**6)*np.exp(-(L/8000)**6)
+        elif self.det=='Planck':
+            return np.ones(len(L))
 
     def beam_function(self, L):
         return np.exp(-0.5 * np.outer(L**2, self.sigma_beam**2)).T
