@@ -181,9 +181,13 @@ class LC(object):
         return covmat
     
 
-    def weights(self, cov=None):
-        seds = self.getSeds(cmb=self.cmb, tsz=self.tsz, cib=self.cib)
- 
+    def weights(self, cov=None, tf_alm=None):
+        f = self.getSeds(cmb=self.cmb, tsz=self.tsz, cib=self.cib)
+
+        if tf_alm is not None:
+            tf_pwr = np.array([bin_spectrum(hp.alm2cl(i), self.Le) for i in tf_alm])
+            f *= tf_pwr.T[:, :, np.newaxis]
+
         if cov is None:
             covmat = self.getCov(blind=self.blind)
         else:
@@ -192,9 +196,11 @@ class LC(object):
         bweights = np.zeros([self.nL,self.nc,self.nb])
 
         for l in range(self.nL):
+            if np.all(f[l] == 0):
+                continue
             wmat = np.linalg.inv(covmat[l])
-            atw = np.dot(np.transpose(seds[l]),wmat)
-            atwa = np.dot(atw,seds[l])
+            atw = np.dot(np.transpose(f[l]),wmat)
+            atwa = np.dot(atw,f[l])
             iatwa = np.linalg.inv(atwa)
             bweights[l] = np.dot(iatwa,atw)
 
