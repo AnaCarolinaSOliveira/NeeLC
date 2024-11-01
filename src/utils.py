@@ -219,17 +219,6 @@ def grid2alm(grid):
             #alm[hp.Alm.getidx(lmax,i,np.arange(i+1)-1)]=grid[:i+1,i]
     return alm
 
-def get_tfalm(tf, lmin, lmax, mmin, bl=None):
-    """
-    Returns the transfer function alm. If bl is provided, 
-    the object returned is the TF already convolved with
-    the beam.
-    """
-    tf2d = almtf2d(tf, lmax, lmin=lmin,
-              mmin=mmin, bl=bl)
-    tfalm = grid2alm(tf2d)
-    return tfalm
-
 
 #######################################
 
@@ -265,6 +254,17 @@ class DetSpecs(object):
             return np.exp(-((6000-L)/6600)**6)*np.exp(-(L/8000)**6)
         elif self.det=='Planck':
             return np.ones(len(L))
+
+    def get_tfalm(self, ell, lmin, lmax, mmin, bl=False):
+        """
+        Returns the transfer function alm. If bl is True, 
+        the object returned is the TF already convolved with
+        the beam.
+        """
+        tf = self.transfer_function(ell)
+        beam = self.beam_function(ell) if bl else [None]
+        tfalm = np.array([grid2alm(almtf2d(tf, lmax, lmin=lmin, mmin=mmin, bl=b)) for b in beam])
+        return tfalm
 
     def beam_function(self, L):
         return np.exp(-0.5 * np.outer(L**2, self.sigma_beam**2)).T
