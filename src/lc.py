@@ -45,44 +45,43 @@ class LC(object):
 
         t_cmb_muk = 2.7255e6 # muK
 
-        def tsz_sed(nus):
+        def bandpass_corrected_sed(nus, factor_func, beta=None):
             sed = np.zeros(len(nus))
-
+            
             for idx, nu in enumerate(nus):
-                if (int(nu)==95 or int(nu)==150 or int(nu)==220):
-                    spt = DetSpecs(det='SPT3G')
+                if int(nu) in [95, 150, 220]:
+                    spt = DetSpecs(det='SPT3G_main')
                     freqs, b = spt.load_bandpass(int(nu))
-                elif ((nu==100) or (nu==143) or (nu==217) or (nu==353) or (nu==545) or (nu==857)):
+                elif int(nu) in [100, 143, 217, 353, 545, 857]:
                     planck = DetSpecs(det='Planck')
                     freqs, b = planck.load_bandpass(int(nu))
                 dbdt = dBdT(freqs)
-                tszfac = t_cmb_muk * f_sz(freqs)  # tSZ spectral dependence
-                tszfac[np.isinf(tszfac)] = 0
-                sed[idx] = np.trapz(b * tszfac * dbdt, freqs) / np.trapz(b * dbdt, freqs)
+                
+                if beta is not None:
+                    factor = t_cmb_muk * factor_func(freqs, beta)
+                else:
+                    factor = t_cmb_muk * factor_func(freqs)
+                
+                factor[np.isnan(factor) | np.isinf(factor)] = 0
+                sed[idx] = np.trapz(b * factor * dbdt, freqs) / np.trapz(b * dbdt, freqs)
 
             return sed
-        
-        def cib_sed(nus):
-            # TODO implement bandpass corrections to CIB as well later
-            beta_p = 1.48
-            beta_cl = 2.23
-            cibfac = t_cmb_muk * f_cib(nus, beta_p) # using poisson term only, for now
-            cibfac_norm = cibfac / 1 # cibfac[1]
-            return cibfac_norm
-        
+
         idx=0
         if cmb:
             seds[:,:,idx] = 1.
             idx+=1
 
         if tsz:
-            tszfac = tsz_sed(bands) # tSZ spectral dependence, in compton y units 
+            tszfac = bandpass_corrected_sed(bands, f_sz)
             for b in range(len(bands)):
                 seds[:,b,idx] = tszfac[b]
             idx+=1
 
         if cib:
-            cibfac = cib_sed(bands) # using poisson term only, for now
+            beta_p = 1.48
+            beta_cl = 2.23
+            cibfac = bandpass_corrected_sed(bands, f_cib, beta=beta_p)
             for b in range(len(bands)):
                 seds[:,b,idx] = cibfac[b]
             idx+=1
@@ -181,12 +180,8 @@ class LC(object):
         return covmat
     
 
-    def weights(self, cov=None, tf_alm=None):
+    def weights(self, cov=None):
         f = self.getSeds(cmb=self.cmb, tsz=self.tsz, cib=self.cib)
-
-        if tf_alm is not None:
-            tf_pwr = np.array([bin_spectrum(hp.alm2cl(i), self.Le) for i in tf_alm])
-            f *= tf_pwr.T[:, :, np.newaxis]
 
         if cov is None:
             covmat = self.getCov(blind=self.blind)
@@ -196,13 +191,30 @@ class LC(object):
         bweights = np.zeros([self.nL,self.nc,self.nb])
 
         for l in range(self.nL):
+            
             if np.all(f[l] == 0):
                 continue
-            wmat = np.linalg.inv(covmat[l])
-            atw = np.dot(np.transpose(f[l]),wmat)
-            atwa = np.dot(atw,f[l])
+
+            non_zero_rows = ~np.all(covmat[l] == 0, axis=1)
+            non_zero_cols = ~np.all(covmat[l] == 0, axis=0)
+            non_zero_indices = np.where(non_zero_rows & non_zero_cols)[0]
+
+            # If no zero-only rows/columns are found, use the entire matrix
+            if len(non_zero_indices) == covmat[l].shape[0]:
+                valid_covmat = covmat[l]
+                valid_f = f[l]
+            else:
+                # Otherwise, "chop" to the non-zero submatrix
+                valid_covmat = covmat[l][np.ix_(non_zero_indices, non_zero_indices)]
+                valid_f = f[l][non_zero_indices,:]
+
+            wmat = np.linalg.inv(valid_covmat)
+            atw = np.dot(np.transpose(valid_f),wmat)
+            atwa = np.dot(atw,valid_f)
             iatwa = np.linalg.inv(atwa)
-            bweights[l] = np.dot(iatwa,atw)
+            valid_bweights = np.dot(iatwa,atw)
+
+            bweights[l,:, :valid_bweights.shape[1]] = valid_bweights
 
         return bweights
     
@@ -234,4 +246,4 @@ class LC(object):
             return rec_alms, rec_maps
         else:
             return rec_alms
-        
+
