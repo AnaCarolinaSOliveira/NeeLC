@@ -15,6 +15,9 @@ C = 2.99792458e8 # m/s
 ##########################
 
 
+########## Array operations ##########
+
+
 def reduce_lmax(alm, lmax=4000, verbose=False):
     """
     (Stolen from Yuuki Omori)
@@ -50,6 +53,28 @@ def reduce_lmax(alm, lmax=4000, verbose=False):
     return almout
 
 
+def bin_spectrum(cl, new_edges):
+    sum_c = lambda l: (2*l + 1)*cl[l]
+    modes = lambda l: (2*l + 1)
+    pwr_binned = np.zeros([len(new_edges)-1])
+    for e in range(len(new_edges[:-1])):
+        bin_range = np.arange(new_edges[e],new_edges[e+1],1)
+        n_modes = 0
+        c_b = 0
+        for l in bin_range:
+            n_modes += modes(l)
+            c_b += sum_c(l)
+        pwr_binned[e] = c_b / n_modes
+    return pwr_binned
+
+
+def rebin_array(array, newbins, oldbins):
+    array_rebin = np.zeros(newbins[-1]+1)
+    for i in range(len(array)):
+        array_rebin[oldbins[i]:oldbins[i+1]] = array[i]
+    return array_rebin
+
+
 def calculate_nside(l):
     """
     Calculate the smallest power of 2 greater than l/2.
@@ -64,19 +89,6 @@ def calculate_nside(l):
     # return 2 ** np.ceil(np.log2(l / 2)).astype(int)
     nside = 2 ** np.ceil(np.log2(l / 2)).astype(int)
     return np.maximum(nside, 32)
-
-
-def arcmin2rad(arcmin):
-    """
-    Convert arcminutes to radians.
-
-    Parameters:
-    arcmin (float or array-like): The input value or array in arcminutes.
-
-    Returns:
-    float or array-like: The value or array converted to radians.
-    """
-    return arcmin * np.pi / (180. * 60.)
 
 
 def masked_smoothing(U, fwhm=5.0, use_pixel_weights=True):
@@ -99,29 +111,8 @@ def masked_smoothing(U, fwhm=5.0, use_pixel_weights=True):
     WW = hp.smoothing(W, fwhm=np.radians(fwhm), use_pixel_weights=use_pixel_weights)
     return VV / WW
 
-def bin_spectrum(cl, new_edges):
-    sum_c = lambda l: (2*l + 1)*cl[l]
-    modes = lambda l: (2*l + 1)
-    pwr_binned = np.zeros([len(new_edges)-1])
-    for e in range(len(new_edges[:-1])):
-        bin_range = np.arange(new_edges[e],new_edges[e+1],1)
-        n_modes = 0
-        c_b = 0
-        for l in bin_range:
-            n_modes += modes(l)
-            c_b += sum_c(l)
-        pwr_binned[e] = c_b / n_modes
-    return pwr_binned
 
-def rebin_array(array, newbins, oldbins):
-    array_rebin = np.zeros(newbins[-1]+1)
-    for i in range(len(array)):
-        array_rebin[oldbins[i]:oldbins[i+1]] = array[i]
-    return array_rebin
-
-def cl2dl(Cl, Lrange):
-    factor = (Lrange*(Lrange+1))/(2*np.pi)
-    return Cl*factor
+########## Spectral functions ##########
 
 
 def f_sz(nus, bandpassed=False):
@@ -161,13 +152,31 @@ def f_cib(nus, beta):
     F = (H_PLANCK * nus*1e9)/(K_B * T_CIB) 
     return  (nus**beta) * ((np.exp(X)-1.)**2.) / ((np.exp(F)-1.)*X*np.exp(X))
 
+
+########## Unit conversion ##########
+
+
+def arcmin2rad(arcmin):
+    """
+    Convert arcminutes to radians.
+
+    Parameters:
+    arcmin (float or array-like): The input value or array in arcminutes.
+
+    Returns:
+    float or array-like: The value or array converted to radians.
+    """
+    return arcmin * np.pi / (180. * 60.)
+
+
 def dBdT(nus):
     X = (H_PLANCK * nus*1e9)/(K_B * T_CMB)  
     factor = 2 * H_PLANCK * ((nus*1e9)**3) * X / (C**2) / T_CMB
     exp_term = (np.exp(X)) / (np.exp(X) - 1)**2
     return factor * exp_term
 
-def convert_MJy_per_sr_to_muK(map_jysr, nu):
+
+def convert_MJy_per_sr2muK(map_jysr, nu):
     """
     Converts map in units of MJy/sr to thermodynamic units,
     muK_CMB. Input nu must be in GHz.
@@ -180,7 +189,26 @@ def convert_MJy_per_sr_to_muK(map_jysr, nu):
     return map_jysr / factor
 
 
+def comptony2muK(map_y, nu, bandpassed=True):
+    """
+    Converts a tSZ map/alm in units of Compton-y to muK_CMB 
+    at given a frequency nu. Input nu must be in GHz.
+    """
+    map_muK = map_y * 2.726e6 * f_sz(nu, bandpassed=bandpassed)
+    return map_muK
+
+
+def muK2comptony(map_muK, nu, bandpassed=True):
+    """
+    Converts a tSZ map/alm in units of muK_CMB at given a frequency nu
+    to Compton-y. Input nu must be in GHz.
+    """
+    map_y = map_muK / 2.726e6 / f_sz(nu, bandpassed=bandpassed)
+    return map_y
+
+
 ########## Transfer function ##########
+
 
 def almtf2d(tf, lmax, lmin=0, mmin=0, bl=None):
     """
@@ -220,7 +248,10 @@ def grid2alm(grid):
     return alm
 
 
-#######################################
+############################################
+
+
+########## Detector-specific info ##########
 
 
 class DetSpecs(object):
