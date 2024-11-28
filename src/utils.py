@@ -135,7 +135,7 @@ def f_sz(nus, bandpassed=False):
         f_sz_bp = np.zeros(len(nus))
         for idx, nu in enumerate(nus):
             if int(nu) in [95, 150, 220]:
-                spt = DetSpecs(det='SPT3G')
+                spt = DetSpecs(det='SPT3G_main')
                 freqs, b = spt.load_bandpass(nu)
             elif nu in [100, 143, 217, 353, 545, 857]:
                 planck = DetSpecs(det='Planck')
@@ -226,20 +226,33 @@ def grid2alm(grid):
 class DetSpecs(object):
 
     def __init__(self, det):
+        
+        allowed_dets = ['SPT3G', 'SPT3G_main', 'SPT3G_winter', 'Planck']
+        assert det in allowed_dets, f"det must be one of {allowed_dets}, but got '{det}'."
 
         self.det = det
+        
+        if self.det=='SPT3G' or self.det=='SPT3G_main' or self.det=='SPT3G_winter':
 
-        if det=='SPT3G':
             self.bands = np.array([95.,150.,220.]) # [GHz]
             self.beam_size_fwhm_arcmin = np.array([1.57,1.17,1.04]) # in arcmin
 
-            self.white_noise_arcmin = np.array([3.0, 2.5, 8.9]) # in muK-arcmin
-            self.white_noise = arcmin2rad(self.white_noise_arcmin)
+            if self.det=='SPT3G_main':
 
-            self.l_knee = np.array([1200., 2200., 2300.])
-            self.alpha = np.array([-3.0, -4.0, -4.0])
+                self.white_noise_arcmin = np.array([3.0, 2.5, 8.9]) # in muK-arcmin
+                self.white_noise = arcmin2rad(self.white_noise_arcmin)
+                self.l_knee = np.array([1200., 2200., 2300.])
+                self.alpha = np.array([-3.0, -4.0, -4.0])
 
-        elif det=='Planck':
+            elif self.det=='SPT3G' or self.det=='SPT3G_winter':
+
+                self.white_noise_arcmin = np.array([5.36, 4.21, 15.72]) # in muK-arcmin
+                self.white_noise = arcmin2rad(self.white_noise_arcmin)
+                self.l_knee = np.array([1052, 2023, 1873])
+                self.alpha = np.array([-4.68, -4.11, -4.22])
+
+        elif self.det=='Planck':
+            
             self.bands = np.array([30.,44.,70.,100.,143.,217.,353.,545.,857.]) # [GHz]
             self.lfi_bands = self.bands[0:3] 
             self.hfi_bands = self.bands[3:] 
@@ -250,7 +263,7 @@ class DetSpecs(object):
         self.sigma_beam = self.beam_size_fwhm / np.sqrt(8.*np.log(2.)) # fwhm to sigma  
 
     def transfer_function(self, L):
-        if self.det=='SPT3G':
+        if self.det=='SPT3G' or self.det=='SPT3G_main' or self.det=='SPT3G_winter':
             return np.exp(-((6000-L)/6600)**6)*np.exp(-(L/8000)**6)
         elif self.det=='Planck':
             return np.ones(len(L))
@@ -267,8 +280,9 @@ class DetSpecs(object):
         return tfalm
 
     def beam_function(self, L):
-        return np.exp(-0.5 * np.outer(L**2, self.sigma_beam**2)).T
-    
+        # return np.exp(-0.5 * np.outer(L**2, self.sigma_beam**2)).T
+        return np.exp(-0.5 * np.outer(L*(L+1), self.sigma_beam**2)).T
+
     def noise_eff(self, L):
         if not isinstance(L, np.ndarray):
             L = np.array(L)
@@ -286,7 +300,7 @@ class DetSpecs(object):
         # Frequency in GHz
         nu = (np.arange(40000)+1)
     
-        if self.det == 'SPT3G':
+        if self.det=='SPT3G' or self.det == 'SPT3G_main' or self.det == 'SPT3G_winter':
 
             if int(freq) in [95, 150, 220]:
                 # f     = f'../input/spt3g_bandpass_{freq}GHz_2019.txt' # up-to-date SPT3G bandpasses
