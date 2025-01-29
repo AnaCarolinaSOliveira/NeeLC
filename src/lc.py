@@ -9,7 +9,9 @@ PATH_INPUTS = '/scratch/users/anaoliv/component_inputs'
 
 class LC(object):
 
-    def __init__(self, bands, lMin=0, lMax=5000, nL=200, cmb=True, tsz=True, cib=True, blind=False):
+    def __init__(self, bands, lMin=0, lMax=5000, nL=200, 
+                 cmb=True, tsz=True, cib=True, cib_dbeta=True, 
+                 blind=False, nu0=353, beta=1.77, T_cib=15.14):
         
         # setting up ell-space
         self.lMin = lMin
@@ -23,6 +25,12 @@ class LC(object):
         self.cmb = cmb
         self.tsz = tsz
         self.cib = cib
+        self.cib_dbeta = cib_dbeta
+
+        self.nu0 = nu0
+        self.beta = beta
+        self.T_cib = T_cib
+
         self.comps = []
         if cmb:
             self.comps.append('CMB')
@@ -30,7 +38,9 @@ class LC(object):
             self.comps.append('tSZ')
         if cib:
             self.comps.append('CIB')
-        self.nc = sum([cmb, tsz, cib])
+        if cib_dbeta:
+            self.comps.append('CIB_dbeta')
+        self.nc = sum([cmb, tsz, cib, cib_dbeta])
 
         # detector specifics
         self.bands = bands
@@ -38,14 +48,18 @@ class LC(object):
 
         self.blind = blind
 
-    def getSeds(self, cmb, tsz, cib):
+    def getSeds(self, cmb, tsz, cib, cib_dbeta):
+        nu0 = self.nu0
+        beta = self.beta
+        T_cib = self.T_cib
+
         bands = self.bands
-        nc = sum([cmb, tsz, cib])
+        nc = sum([cmb, tsz, cib, cib_dbeta])
         seds = np.zeros([self.nL, self.nb, nc])
 
         t_cmb_muk = 2.7255e6 # muK
 
-        def bandpass_corrected_sed(nus, factor_func, beta=None):
+        def bandpass_corrected_sed(nus, factor_func, beta=None, T_cib=None):
             sed = np.zeros(len(nus))
             
             for idx, nu in enumerate(nus):
@@ -58,7 +72,7 @@ class LC(object):
                 dbdt = dBdT(freqs)
                 
                 if beta is not None:
-                    factor = t_cmb_muk * factor_func(freqs, beta)
+                    factor = t_cmb_muk * factor_func(freqs, beta, nu0=nu0, T_cib=T_cib)
                 else:
                     factor = t_cmb_muk * factor_func(freqs)
                 
@@ -79,11 +93,15 @@ class LC(object):
             idx+=1
 
         if cib:
-            beta_p = 1.48
-            beta_cl = 2.23
-            cibfac = bandpass_corrected_sed(bands, f_cib, beta=beta_p)
+            cibfac = bandpass_corrected_sed(bands, f_cib, beta=beta, T_cib=T_cib)
             for b in range(len(bands)):
                 seds[:,b,idx] = cibfac[b]
+            idx+=1
+
+        if cib_dbeta:
+            cib_dbeta_fac = bandpass_corrected_sed(bands, f_cib_dbeta, beta=beta, T_cib=T_cib)
+            for b in range(len(bands)):
+                seds[:,b,idx] = cib_dbeta_fac[b]
             idx+=1
         
         return seds 
@@ -181,7 +199,7 @@ class LC(object):
     
 
     def weights(self, cov=None):
-        f = self.getSeds(cmb=self.cmb, tsz=self.tsz, cib=self.cib)
+        f = self.getSeds(cmb=self.cmb, tsz=self.tsz, cib=self.cib, cib_dbeta=self.cib_dbeta)
 
         if cov is None:
             covmat = self.getCov(blind=self.blind)
@@ -211,8 +229,64 @@ class LC(object):
             wmat = np.linalg.inv(valid_covmat)
             atw = np.dot(np.transpose(valid_f),wmat)
             atwa = np.dot(atw,valid_f)
-            iatwa = np.linalg.inv(atwa)
+            iatwa = np.linalg.inv(atwa)            
             valid_bweights = np.dot(iatwa,atw)
+            bweights[l,:, :valid_bweights.shape[1]] = valid_bweights
+
+        return bweights
+    
+    def weights_multi_nulling_case(self, cov=None, thresh=500):
+        f1 = self.getSeds(cmb=True, tsz=True, cib=True, cib_dbeta=True)[np.where(self.Le < thresh)[0][:-1]]
+        f2 = self.getSeds(cmb=False, tsz=True, cib=True, cib_dbeta=True)[np.where(self.Le >= thresh)[0]-1]
+
+        zeros = np.zeros(f2.shape[:-1] + (1,))
+        f2_padded = np.concatenate((zeros, f2), axis=-1)
+        f = np.vstack((f1, f2_padded))
+
+        if cov is None:
+            covmat = self.getCov(blind=self.blind)
+        else:
+            covmat = cov
+        
+        bweights = np.zeros([self.nL,self.nc,self.nb])
+
+        for l in range(self.nL):
+            
+            if np.all(f[l] == 0):
+                continue
+
+            non_zero_rows = ~np.all(covmat[l] == 0, axis=1)
+            non_zero_cols = ~np.all(covmat[l] == 0, axis=0)
+            non_zero_indices = np.where(non_zero_rows & non_zero_cols)[0]
+
+            # If no zero-only rows/columns are found, use the entire matrix
+            if len(non_zero_indices) == covmat[l].shape[0]:
+                valid_covmat = covmat[l]
+                valid_f = f[l]
+            else:
+                # Otherwise, "chop" to the non-zero submatrix
+                valid_covmat = covmat[l][np.ix_(non_zero_indices, non_zero_indices)]
+                valid_f = f[l][non_zero_indices,:]
+
+            wmat = np.linalg.inv(valid_covmat)
+            atw = np.dot(np.transpose(valid_f),wmat)
+            atwa = np.dot(atw,valid_f)
+
+            non_zero_atwa_rows = ~np.all(atwa == 0, axis=1)
+            non_zero_atwa_cols = ~np.all(atwa == 0, axis=0)
+            non_zero_atwa_indices = np.where(non_zero_atwa_rows & non_zero_atwa_cols)[0]
+
+            valid_atwa = atwa[np.ix_(non_zero_atwa_rows, non_zero_atwa_cols)]
+            try:
+                iatwa = np.linalg.inv(valid_atwa)
+            except np.linalg.LinAlgError:
+                print(f"atwa is singular for bin={l}, skipping.")
+                continue
+
+            full_iatwa = np.zeros((self.nc, self.nc))
+            full_iatwa[np.ix_(non_zero_atwa_indices, non_zero_atwa_indices)] = iatwa
+
+            valid_bweights = np.dot(full_iatwa,atw)
 
             bweights[l,:, :valid_bweights.shape[1]] = valid_bweights
 

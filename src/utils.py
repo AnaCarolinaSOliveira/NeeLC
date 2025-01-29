@@ -7,9 +7,9 @@ import pickle
 ####### constants ########
 
 T_CMB = 2.7255 # K
+T_CMB_muK = 2.7255*1e6 # muK
 H_PLANCK = 6.62607004e-34 # Js
 K_B = 1.38064852e-23 # J/K
-T_CIB = 25 # K
 C = 2.99792458e8 # m/s
 
 ##########################
@@ -144,14 +144,35 @@ def f_sz(nus, bandpassed=False):
         return X * (np.exp(X)+1.)/(np.exp(X)-1.) - 4.
     
 
-def f_cib(nus, beta):
+def f_cib(nus, beta, nu0=353, T_cib=15.14):
     """
     Spectral dependence of the CIB, for nus in GHz.
     """
-    X = (H_PLANCK * nus*1e9)/(K_B * T_CMB)  
-    F = (H_PLANCK * nus*1e9)/(K_B * T_CIB) 
-    return  (nus**beta) * ((np.exp(X)-1.)**2.) / ((np.exp(F)-1.)*X*np.exp(X))
+    # X = (H_PLANCK * nus*1e9)/(K_B * T_CMB)  
+    F = (H_PLANCK * nus*1e9)/(K_B * T_cib) 
+    # return  (nus**beta) * T_CMB * ((np.exp(X)-1.)**2.) / ((np.exp(F)-1.)*X*np.exp(X))
+    return (nus/nu0)**(3+beta) * (1/np.expm1(F)) / dBdT(nus)
 
+
+def f_cib_dbeta(nus, beta, nu0=353, T_cib=15.14):
+    """
+    Spectral dependence of the CIB's first moment 
+    w.r.t. beta, for nus in GHz.
+    """
+    # X = (H_PLANCK * nus*1e9)/(K_B * T_CMB)  
+    # F = (H_PLANCK * nus*1e9)/(K_B * T_CIB) 
+    # return  np.log(nus) * (nus**beta) * T_CMB * ((np.exp(X)-1.)**2.) / ((np.exp(F)-1.)*X*np.exp(X))
+    return np.log(nus/nu0) * f_cib(nus, beta, T_cib)
+
+def f_cib_dT(nus, beta, T_cib=15.14):
+    """
+    Spectral dependence of the CIB's first moment 
+    w.r.t. T, for nus in GHz.
+    """
+    # X = (H_PLANCK * nus*1e9)/(K_B * T_CMB)  
+    F = (H_PLANCK * nus*1e9)/(K_B * T_cib) 
+    # return  np.log(nus) * (nus**beta) * T_CMB * ((np.exp(X)-1.)**2.) / ((np.exp(F)-1.)*X*np.exp(X))
+    return ( F * np.exp(F) / (T_cib * np.expm1(F)) ) * f_cib(nus, beta, T_cib)
 
 ########## Unit conversion ##########
 
@@ -171,8 +192,8 @@ def arcmin2rad(arcmin):
 
 def dBdT(nus):
     X = (H_PLANCK * nus*1e9)/(K_B * T_CMB)  
-    factor = 2 * H_PLANCK * ((nus*1e9)**3) * X / (C**2) / T_CMB
-    exp_term = (np.exp(X)) / (np.exp(X) - 1)**2
+    factor = 2 * H_PLANCK * ((nus*1e9)**3) * X / (C**2) / T_CMB_muK
+    exp_term = np.exp(X) / np.expm1(X)**2
     return factor * exp_term
 
 
